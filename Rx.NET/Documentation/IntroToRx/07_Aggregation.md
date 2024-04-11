@@ -1,54 +1,54 @@
-# Aggregation
+# 聚合
 
-Data is not always tractable in its raw form. Sometimes we need to consolidate, collate, combine or condense the mountains of data we receive. This might just be a case of reducing the volume of data to a manageable level. For example, consider fast moving data from domains like instrumentation, finance, signal processing and operational intelligence. This kind of data can change at a rate of over ten values per second for individual sources, and much higher rates if we're observing multiple sources. Can a person actually consume this? For human consumption, aggregate values like averages, minimums and maximums can be of more use.
+数据未经处理并非总是易于操作。有时候，我们需要归纳、整理、组合或压缩接收到的海量数据。这可能只是为了将数据量降低到一个可管理的水平。例如，考虑一下来自仪表、金融、信号处理和运营智能领域的快速移动数据。这种数据的变化速率可能每秒超过十个值，如果我们在观测多个源，则变化速率可能更高。人类真的能消化这么快的数据吗？对于人类消费者而言，平均值、最小值和最大值等聚合值可能更有用。
 
-We can often achieve more than this. The way in which we combine and correlate may enable us to reveal patterns, providing insights that would not be available from any individual message, or from simple reduction to a single statistical measure. Rx's composability enables us to express complex and subtle computations over streams of data enabling us not just to reduce the volume of messages that users have to deal with, but to increase the amount of value in each message a human receives.
+我们常常可以实现更多。我们组合和关联的方式可能使我们能够揭示模式，提供单个消息或者单一统计度量无法提供的洞察。Rx的可组合性使我们能够对数据流进行复杂和微妙的计算，这不仅可以减少用户需要处理的消息量，还可以增加每条消息给用户带来的价值。
 
-We will start with the simplest aggregation functions, which reduce an observable sequence to a sequence with a single value in some specific way. We then move on to more general-purpose operators that enable you to define your own aggregation mechanisms.
+我们将从最简单的聚合函数开始，这些聚合函数以某种特定方式将可观察序列简化成具有单个值的序列。然后我们将继续学习更通用的操作符，让你可以定义自己的聚合机制。
 
-## Simple Numeric Aggregation
+## 简单的数值聚合
 
-Rx supports various standard LINQ operators that reduce all of the values in a sequence down to a single numeric result.
+Rx支持多种标准LINQ操作符，这些操作符将序列中的所有值归纳为一个数字结果。
 
 ### Count
 
-`Count` tells you how many elements a sequence contains. Although this is a standard LINQ operator, Rx's version deviates from the `IEnumerable<T>` version as Rx will return an observable sequence, not a scalar value. As usual, this is because of the push-related nature of Rx. Rx's `Count` can't demand that its source supply all elements immediately, so it just has to wait until the source says that it has finished. The sequence that `Count` returns will always be of type `IObservable<int>`, regardless of the source's element type. This will do nothing until the source completes, at which point it will emit a single value reporting how many elements the source produced, and then it will in turn immediately complete. This example uses `Count` with `Range`, because `Range` generates all of its values as quickly as possible and then completes, meaning we get a result from `Count` immediately:
+`Count` 告诉你一个序列包含多少个元素。虽然这是一个标准的LINQ操作符，但Rx的版本与 `IEnumerable<T>` 的版本有所不同，因为Rx会返回一个可观察序列，而不是一个标量值。通常情况下，这是由于Rx的推送相关性质。Rx的 `Count` 不能要求其源立即提供所有元素，所以只能等到源表示已完成。`Count` 返回的序列始终是 `IObservable<int>` 类型，不管源的元素类型是什么。以下是使用 `Count` 与 `Range` 的例子，因为 `Range` 尽可能快地生成所有值，然后完成，这意味着我们可以立即从 `Count` 得到结果：
 
 ```csharp
 IObservable<int> numbers = Observable.Range(0,3);
 numbers.Count().Dump("count");
 ```
 
-Output:
+输出：
 
 ```
 count-->3
-count Completed
+count Complete
 ```
 
-If you are expecting your sequence to have more values than a 32-bit signed integer can count, you can use the `LongCount` operator instead. This is just the same as `Count` except it returns an `IObservable<long>`.
+如果你预期你的序列会有超过32位有符号整数能够计数的值，你可以使用 `LongCount` 操作符。这与 `Count` 相同，但它返回一个 `IObservable<long>`。
 
 ### Sum
 
-The `Sum` operator adds together all the values in its source, producing the total as its only output. As with `Count`, Rx's `Sum` differs from most other LINQ providers in that it does not produce a scalar as its output. It produces an observable sequence that does nothing until its source completes. When the source completes, the observable returned by `Sum` produces a single value and then immediately completes. This example shows it in use:
+`Sum` 操作符将其源中的所有值相加，生成总和作为唯一输出。与 `Count` 一样，Rx的 `Sum` 与大多数其他LINQ提供程序不同，它不产生标量作为其输出。它产生一个什么也不做的可观测序列，直到其源完成。当源完成时，`Sum` 返回的可观测对象会产生一个值，然后立即完成。以下示例展示了它的使用：
 
 ```csharp
 IObservable<int> numbers = Observable.Range(1,5);
 numbers.Sum().Dump("sum");
 ```
 
-The output shows the single result produced by `Sum`:
+输出显示 `Sum` 产生的单个结果：
 
 ```
 sum-->15
 sum completed
 ```
 
-`Sum` is only able to work with values of type `int`, `long`, `float`, `double` `decimal`, or the nullable versions of these. This means that there are types you might expect to be able to `Sum` that you can't. For example the `BigInteger` type in the `System.Numerics` namespace represents integer values whose size is limited only by available memory, and how long you're prepared to wait for it to perform calculations. (Even basic arithmetic gets very slow on numbers with millions of digits.) You can use `+` to add these together because the type defines an overload for that operator. But `Sum` has historically had no way to find that. The introduction of [generic math in C# 11.0](https://learn.microsoft.com/en-us/dotnet/standard/generics/math#operator-interfaces) means that it would technically be possible to introduce a version of `Sum` that would work for any type `T` that implemented [`IAdditionOperators<T, T, T>`](https://learn.microsoft.com/en-us/dotnet/api/system.numerics.iadditionoperators-3). However, that would mean a dependency on .NET 7.0 or later (because generic math is not available in older versions), and at the time of writing this, Rx supports .NET 7.0 through its `net6.0` target. It could introduce a separate `net7.0` and/or `net8.0` target to enable this, but has not yet done so. (To be fair, [`Sum` in LINQ to Objects also doesn't support this yet](https://github.com/dotnet/runtime/issues/64031).)
+`Sum` 只能处理 `int`、`long`、`float`、`double`、`decimal` 或这些类型的可空版本。这意味着有些你可能期望能够 `Sum` 的类型却不能。例如，在 `System.Numerics` 命名空间中的 `BigInteger` 类型表示只受可用内存限制的整数值，以及你准备等待它进行计算的时间。（即使在有数百万位的数字上，基本算术也非常慢。）你可以使用 `+` 将这些数字加在一起，因为该类型为该操作符定义了一个重载。但 `Sum` 历史上无法找到它。[C# 11.0中引入的通用数学](https://learn.microsoft.com/en-us/dotnet/standard/generics/math#operator-interfaces)意味着技术上有可能引入一个版本的 `Sum`，适用于任何实现了 [`IAdditionOperators<T, T, T>`](https://learn.microsoft.com/en-us/dotnet/api/system.numerics.iadditionoperators-3) 的类型 `T`。然而，这将意味着依赖于 .NET 7.0 或更高版本（因为旧版本中没有通用数学），而在撰写本文时，Rx 支持 .NET 7.0 通过其 `net6.0` 目标。它可以引入一个单独的 `net7.0` 和/或 `net8.0` 目标来启用这一功能，但尚未这样做。（公平来说，[`LINQ to Objects 中的 Sum` 也还没有支持这一点](https://github.com/dotnet/runtime/issues/64031)。）
 
-If you supply `Sum` with the nullable versions of these types (e.g., your source is an `IObservable<int?>`) then `Sum` will also return a sequence with a nullable item type, and it will produce `null` if any of the input values is `null`.
+如果你为 `Sum` 提供这些类型的可空版本（例如，你的源是一个 `IObservable<int?>`），那么 `Sum` 也会返回一个具有可空项目类型的序列，并且如果任何输入值为 `null`，它将产生 `null`。
 
-Although `Sum` can work only with a small, fixed list of numeric types, your source doesn't necessarily have to produce values of those types. `Sum` offers overloads that accept a lambda that extracts a suitable numeric value from each input element. For example, suppose you wanted to answer the following unlikely question: if the next 10 ships that happen to broadcast descriptions of themselves over AIS were put side by side, would they all fit in a channel of some particular width? We could do this by filtering the AIS messages down to those that provide ship size information, using `Take` to collect the next 10 such messages, and then using `Sum`. The Ais.NET library's `IVesselDimensions` interface does not implement addition (and even if it did, we already just saw that Rx wouldn't be able to exploit that), but that's fine: all we need to do is supply a lambda that can take an `IVesselDimensions` and return a value of some numeric type that `Sum` can process:
+尽管 `Sum` 只能处理一小部分固定列表的数值类型，你的源不一定要产生这些类型的值。`Sum` 提供了接受 lambda 的重载，该 lambda 从每个输入元素中提取适当的数值。例如，假设你想回答以下不太可能的问题：如果接下来10艘恰好通过AIS广播自身描述的船只并排放置，它们是否都能适应某个特定宽度的通道？我们可以通过过滤提供船只尺寸信息的AIS消息，使用 `Take` 收集接下来的10条此类消息，然后使用 `Sum`。Ais.NET库的 `IVesselDimensions` 接口没有实现加法（即使实现了，我们刚刚看到 Rx 也无法利用它），但没关系：我们所需要的只是提供一个 lambda，可以取一个 `IVesselDimensions` 并返回 `Sum` 可处理的某种数值类型：
 
 ```csharp
 IObservable<IVesselDimensions> vesselDimensions = receiverHost.Messages
@@ -60,23 +60,23 @@ IObservable<int> totalVesselWidths = vesselDimensions
             checked((int)(dimensions.DimensionToPort + dimensions.DimensionToStarboard)));
 ```
 
-(If you're wondering what's with cast and the `checked` keyword here, AIS defines these values as unsigned integers, so the Ais.NET library reports them as `uint`, which is not a type Rx's `Sum` supports. In practice, it's very unlikely that a vessel will be wide enough to overflow a 32-bit signed integer, so we just cast it to `int`, and the `checked` keyword will throw an exception in the unlikely event that we encounter ship more than 2.1 billion metres wide.)
+（如果你想知道为什么这里使用类型转换和 `checked` 关键字，AIS 将这些值定义为无符号整数，因此 Ais.NET 库将它们报告为 `uint`，这不是 Rx 的 `Sum` 支持的类型。实际上，船只的宽度不太可能足以溢出一个32位有符号整数，所以我们只是将其转换为 `int`，并且在我们遇到超过21亿米宽的船只时，`checked` 关键字将抛出异常。）
 
 ### Average
 
-The standard LINQ operator `Average` effectively calculates the value that `Sum` would calculate, and then divides it by the value that `Count` would calculate. And once again, whereas most LINQ implementations would return a scalar, Rx's `Average` produces an observable.
+标准LINQ操作符 `Average` 实际上计算的是 `Sum` 会计算的值，然后用 `Count` 会计算的值来除它。再次强调的是，虽然大多数LINQ实现会返回标量，但Rx的 `Average` 生成的是可观察的。
 
-Although `Average` can process values of the same numeric types as `Sum`, the output type will be different in some cases. If the source is `IObservable<int>`, or if you use one of the overloads that takes a lambda that extracts the value from the source, and that lambda returns an `int`, the result will be a `double.` This is because the average of a set of whole numbers is not necessarily a whole number. Likewise, averaging `long` values produces a `double`. However, inputs of type `decimal` produce outputs of type `decimal`, and likewise `float` inputs produce a `float` output.
+尽管 `Average` 可以处理与 `Sum` 相同的数值类型，但在某些情况下，输出类型将不同。如果来源是 `IObservable<int>`，或者你使用了一个采用 lambda 的重载，该 lambda 从来源提取值，并且 lambda 返回一个 `int`，则结果将是一个 `double`。这是因为一组整数的平均值不一定是一个整数。类似地，计算 `long` 值的平均值会产生一个 `double`。然而，`decimal` 类型的输入会产生 `decimal` 类型的输出，同样，`float` 输入会产生 `float` 输出。
 
-As with `Sum`, if the inputs to `Average` are nullable, the output will be too.
+就像 `Sum` 一样，如果 `Average` 的输入是可空的，输出也会是如此。
 
-### Min and Max
+### Min 和 Max
 
-Rx implements the standard LINQ `Min` and `Max` operators which find the element with the highest or lowest value. As with all the other operators in this section, these do not return scalars, and instead return an `IObservable<T>` that produces a single value.
+Rx实现了标准LINQ `Min` 和 `Max` 操作符，这些操作符找到具有最高或最低值的元素。与本节中的所有其他操作符一样，这些操作符不返回标量，而是返回产生单个值的 `IObservable<T>`。
 
-Rx defines specialized implementations for the same numeric types that `Sum` and `Average` support. However, unlike those operators it also defines an overload that will accept source items of any type. When you use `Min` or `Max` on a source type where Rx does not define a specialized implementation, it uses [`Comparer<T>.Default`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.comparer-1.default) to compare items. There is also an overload enabling you to pass a comparer.
+Rx为 `Sum` 和 `Average` 支持的相同数值类型定义了专门的实现。然而，与这些操作符不同的是，它还定义了一个重载，将接受任何类型的源项目。当你在Rx未定义专门实现的源类型上使用 `Min` 或 `Max` 时，它使用 [`Comparer<T>.Default`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.comparer-1.default) 来比较项目。还有一个重载允许你传递一个比较器。
 
-As with `Sum` and `Average` there are overloads that accept a callback. If you use these overloads, `Min` and `Max` will invoke this callback for each source item, and will look for the lowest or highest value that your callback returns. Note that the single output they eventually produce will be a value returned by the callback, and not the original source item from which that value was derived. To see what that means, look at this example:
+与 `Sum` 和 `Average` 一样，有重载接受回调。如果你使用这些重载，`Min` 和 `Max` 将为每个源项目调用此回调，并将寻找你的回调返回的最低或最高值。请注意，它们最终产生的单一输出将是回调返回的值，而不是生成该值的原始源项目。看看这个例子：
 
 ```csharp
 IObservable<int> widthOfWidestVessel = vesselDimensions
@@ -85,11 +85,11 @@ IObservable<int> widthOfWidestVessel = vesselDimensions
             checked((int)(dimensions.DimensionToPort + dimensions.DimensionToStarboard)));
 ```
 
-`Max` returns an `IObservable<int>` here, which will be the width of the widest vessel out of the next 10 messages that report vessel dimensions. But what if you didn't just want to see the width? What if you wanted the whole message?
+`Max` 在这里返回一个 `IObservable<int>`，它将是接下来10条报告船只尺寸的消息中最宽船只的宽度。但如果你不只是想看宽度呢？如果你想要整个消息怎么办？
 
-## MinBy and MaxBy
+## MinBy 和 MaxBy
 
-Rx offers two subtle variations on `Min` and `Max`: `MinBy` and `MaxBy`. These are similar to the callback-based `Min` and `Max` we just saw that enable us to work with sequences of elements that are not numeric values, but which may have numeric properties. The difference is that instead of returning the minimum or maximum value, `MinBy` and `MaxBy` tell you which source element produced that value. For example, suppose that instead of just discovering the width of the widest ship, we wanted to know what ship that actually was:
+Rx提供了 `Min` 和 `Max` 上的两个微妙变体：`MinBy` 和 `MaxBy`。这些与我们刚刚看到的基于回调的 `Min` 和 `Max` 类似，它们使我们能够处理不是数值的元素序列，但可能具有数值属性。区别在于，它们不返回最小值或最大值，而是告诉你哪个源元素产生了该值。例如，假设我们不仅要发现最宽船的宽度，还要知道那实际上是哪艘船：
 
 ```csharp
 IObservable<IVesselDimensions> widthOfWidestVessel = vesselDimensions
@@ -98,24 +98,24 @@ IObservable<IVesselDimensions> widthOfWidestVessel = vesselDimensions
               checked((int)(dimensions.DimensionToPort + dimensions.DimensionToStarboard)));
 ```
 
-This is very similar to the example in the preceding section. We're working with a sequence where the element type is `IVesselDimensions`, so we've supplied a callback that extracts the value we want to use for comparison purposes. (The same callback as last time, in fact.) Just like `Max`, `MaxBy` is trying to work out which element produces the highest value when passed to this callback. It can't know which that is until the source completes. If the source hasn't completed yet, all it can know is the highest _yet_, but that might be exceeded by a future value. So as with all the other operators we've looked at in this chapter, this produces nothing until the source completes, which is why I've put a `Take(10)` in there.
+这与前一节中的示例非常相似。我们正在处理元素类型为 `IVesselDimensions` 的序列，因此我们提供了一个回调来提取用于比较目的的值。(实际上是上次的相同回调。)就像 `Max` 一样，`MaxBy` 正试图找出哪个元素在传递给这个回调时产生最高值。在来源完成之前，它无法知道哪个是最高的。如果来源尚未完成，它所能知道的只是到目前为止的最高值，但这可能会被未来的值超过。因此，与本章中我们所看到的所有其他操作符一样，这将在来源完成之前不产生任何内容，这就是为什么我在这里放了一个 `Take(10)`。
 
-However, the type of sequence we get is different. `Max` returned an `IObservable<int>`, because it invokes the callback for every item in the source, and then produces the highest of the values that our callback returned. But with `MaxBy`, we get back an `IObservable<IVesselDimensions>` because `MaxBy` tells us which source element produced that value.
+然而，我们得到的序列类型不同。`Max` 返回一个 `IObservable<int>`，因为它为源中的每个项目调用回调，然后产生我们的回调返回的最高值。但是 `MaxBy` 返回一个 `IObservable<IVesselDimensions>`，因为 `MaxBy` 告诉我们哪个源元素产生了那个值。
 
-Of course, there might be more than one item that has the highest width—there might be three equally large ships, for example. With `Max` this doesn't matter because it's only trying to return the actual value: it doesn't matter how many source items had the maximum value, because it's the same value in all cases. But with `MaxBy`  we get back the 
-original items that produce the maximum, and if there were three that all did this, we wouldn't want Rx to pick just one arbitrarily.
+当然，可能有不止一个项目具有最大宽度——例如，可能有三艘相同大小的船。对于 `Max` 来说，这无关紧要，因为它只试图返回实际的值：有多少源项目具有最大值并不重要，因为所有情况下的值都是相同的。但是对于 `MaxBy`，我们得到的是产生最大值的原始项目，如果有三个都做到了这一点，我们不希望 Rx 任意挑选其中一个。
 
-So unlike the other aggregation operators we've seen so far, an observable returned by `MinBy` or `MaxBy` doesn't necessarily produce just a single value. It might produce several. You might ask whether it really is an aggregation operator, since it's not reducing the input sequence to one output. But it is reducing it to a single value: the minimum (or maximum) returned by the callback. It's just that it presents the result slightly differently. It produces a sequence based on the result of the aggregation process. You could think of it as a combination of aggregation and filtering: it performs aggregation to determine the minimum or maximum, and then filters the source sequence down just to the elements for which the callback produces that value.
 
-**Note**: LINQ to Objects also defines [`MinBy`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.minby) and [`MaxBy`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.maxby) methods, but they are slightly different. These LINQ to Objects versions do in fact arbitrarily pick a single source element—if there are multiple source values all producing the minimum (or maximum) result, LINQ to Objects gives you just one whereas Rx gives you all of them. Rx defined its versions of these operators years before .NET 6.0 added their LINQ to Objects namesakes, so if you're wondering why Rx does it differently, the real question is why did LINQ to Objects not follow Rx's precedent.
+因此，与我们迄今为止看到的其他聚合操作符不同，`MinBy` 或 `MaxBy` 返回的可观察对象不一定只产生一个值。它可能产生几个。你可能会问，它真的是聚合操作符吗，既然它没有将输入序列简化为一个输出？但它确实将其简化为一个值：回调返回的最小值（或最大值）。它只是以稍微不同的方式呈现结果。它根据聚合过程的结果生成一个序列。你可以将其视为聚合和过滤的组合：它执行聚合以确定最小或最大值，然后将源序列过滤到只有回调产生该值的元素。
 
-## Simple Boolean Aggregation
+**注意**：LINQ to Objects 也定义了 [`MinBy`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.minby) 和 [`MaxBy`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.maxby) 方法，但它们有所不同。这些 LINQ to Objects 版本实际上会随意挑选一个源元素——如果有多个源值都产生最小（或最大）结果，LINQ to Objects 只给你一个，而 Rx 给你所有的。Rx 在 .NET 6.0 添加 LINQ to Objects 同名方法多年前就定义了这些操作符的版本，所以如果你想知道为什么 Rx 做法不同，真正的问题是，为什么 LINQ to Objects 没有遵循 Rx 的先例。
 
-LINQ defines several standard operators that reduce entire sequences to a single boolean value.
+## 简单的布尔聚合
+
+LINQ 定义了几个将整个序列简化为单个布尔值的标准操作符。
 
 ### Any
 
-The `Any` operator has two forms. The parameterless overload effectively asks the question "are there any elements in this sequence?" It returns an observable sequence that will produce a single value of `false` if the source completes without emitting any values. If the source does produce a value however, then when the first value is produced, the result sequence will immediately produce `true` and then complete. If the first notification it gets is an error, then it will pass that error on.
+`Any` 操作符有两种形式。无参数重载实际上在询问“这个序列中有任何元素吗？”它返回一个可观察序列，如果源在未发出任何值的情况下完成，则会生成 `false` 值。如果源确实产生了一个值，那么当第一个值产生时，结果序列将立即产生 `true` 然后完成。如果它第一个接收到的通知是错误，那么它会将该错误传递下去。
 
 ```csharp
 var subject = new Subject<int>();
@@ -128,7 +128,7 @@ subject.OnNext(1);
 subject.OnCompleted();
 ```
 
-Output:
+输出：
 
 ```
 1
@@ -136,14 +136,14 @@ The subject has any values? True
 subject completed
 ```
 
-If we now remove the OnNext(1), the output will change to the following
+如果我们现在删除 OnNext(1)，输出将变为以下内容
 
 ```
 subject completed
 The subject has any values? False
 ```
 
-In the case where the source does produce a value, `Any` immediately unsubscribes from it. So if the source wants to report an error, `Any` will only see this if that is the first notification it produces.
+在源确实产生值的情况下，`Any` 会立即从源取消订阅。因此，如果源想要报告错误，`Any` 只会在它是第一个产生的通知时看到这个错误。
 
 ```csharp
 var subject = new Subject<int>();
@@ -160,21 +160,21 @@ any.Subscribe(b => Console.WriteLine("The subject has any values? {0}", b),
 subject.OnError(new Exception());
 ```
 
-Output:
+输出：
 
 ```
 subject OnError : System.Exception: Exception of type 'System.Exception' was thrown.
 .Any() OnError : System.Exception: Exception of type 'System.Exception' was thrown.
 ```
 
-But if the source were to generate a value before an exception, e.g.:
+但是，如果源先生成一个值再触发异常，例如：
 
 ```csharp
 subject.OnNext(42);
 subject.OnError(new Exception());
 ```
 
-we'd see this output instead:
+我们会看到这样的输出：
 
 ```
 42
@@ -183,24 +183,24 @@ The subject has any values? True
 subject OnError : System.Exception: Exception of type 'System.Exception' was thrown.
 ```
 
-Although the handler that subscribed directly to the source subject still sees the error, our `any` observable reported a value of `True` and then completed, meaning it did not report the error that followed.
+虽然直接订阅源主题的处理程序仍然看到错误，我们的 `any` 观察对象报告了一个 `True` 的值然后完成了，这意味着它没有报告随后发生的错误。
 
-The `Any` method also has an overload that takes a predicate. This effectively asks a slightly different question: "are there any elements in this sequence that meet these criteria?" The effect is similar to using `Where` followed by the no-arguments form of `Any`.
+`Any` 方法还有一个接受谓词的重载。这实际上在问一个稍微不同的问题：“序列中是否有满足这些条件的任何元素？” 其效果类似于使用 `Where` 后跟无参数形式的 `Any`。
 
 ```csharp
 IObservable<bool> any = subject.Any(i => i > 2);
-// Functionally equivalent to 
+// 功能等同于 
 IObservable<bool> longWindedAny = subject.Where(i => i > 2).Any();
 ```
 
 ### All
 
-The `All` operator is similar to the `Any` method that takes a predicate, except that all values must satisfy the predicate. As soon as the predicate rejects a value, the observable returned by `All` produces a `false` value and then completes. If the source reaches its end without producing any elements that do not satisfy the predicate, then `All` will push `true` as its value. (A consequence of this is that if you use `All` on an empty sequence, the result will be a sequence that produces `true`. This is consistent with how `All` works in other LINQ providers, but it might be surprising for anyone not familiar with the formal logic convention known as [vacuous truth](https://en.wikipedia.org/wiki/Vacuous_truth).)
+`All` 操作符类似于带有谓词的 `Any` 方法，除了所有值都必须满足谓词。只要谓词拒绝一个值，`All` 返回的可观察对象就会产生一个 `false` 值然后完成。如果源在不产生任何不满足谓词的元素的情况下达到其结束，那么 `All` 将推送 `true` 作为其值。（此情况的一个结果是，如果你在空序列上使用 `All`，结果将是产生 `true` 的序列。这与其他 LINQ 提供者中的 `All` 工作方式一致，但对于不熟悉所谓 [真空真理](https://en.wikipedia.org/wiki/Vacuous_truth) 的正式逻辑约定的人来说，这可能会令人惊讶。）
 
-Once `All` decides to produce a `false` value, it immediately unsubscribes from the source (just like `Any` does as soon as it determines that it can produce `true`.) If the source produces an error before this happens, the error will be passed along to the subscriber of the `All` method. 
+一旦 `All` 决定产生一个 `false` 值，它会立即从源取消订阅（就像 `Any` 一旦确定它可以产生 `true` 就会这样做）。如果在此之前源产生了错误，错误将被传递给 `All` 方法的订阅者。
 
 ```csharp
-var subject = new Subject<int>();
+var subject = a new Subject<int>();
 subject.Subscribe(Console.WriteLine, () => Console.WriteLine("Subject completed"));
 IEnumerable<bool> all = subject.All(i => i < 5);
 all.Subscribe(b => Console.WriteLine($"All values less than 5? {b}"));
@@ -213,7 +213,7 @@ subject.OnNext(1);
 subject.OnCompleted();
 ```
 
-Output:
+输出：
 
 ```
 1
@@ -228,11 +228,11 @@ subject completed
 
 ### IsEmpty
 
-The LINQ `IsEmpty` operator is logically the opposite of the no-arguments `Any` method. It returns `true` if and only if the source completes without producing any elements. If the source produces an item, `IsEmpty` produces `false` and immediately unsubscribes. If the source produces an error, this forwards that error.
+LINQ 的 `IsEmpty` 操作符在逻辑上与无参数的 `Any` 方法相反。仅当源在未产生任何元素的情况下完成时，它才返回 `true`。如果源产生了一个项目，`IsEmpty` 会产生 `false` 并立即取消订阅。如果源产生了一个错误，这个错误会向前传递。
 
 ### Contains
 
-The `Contains` operator determines whether a particular element is present in a sequence. You could implement it using `Any`, just supplying a callback that compares each item with the value you're looking for. However, it will typically be slightly more succinct, and may be a more direct expression of intent to write `Contains`.
+`Contains` 操作符确定序列中是否存在特定元素。你可以使用 `Any` 实现它，只需提供一个回调，将每个项目与你正在查找的值进行比较。然而，直接写 `Contains` 通常会更简洁，并且可能更直接地表达意图。
 
 ```csharp
 var subject = new Subject<int>();
@@ -253,7 +253,7 @@ subject.OnNext(3);
 subject.OnCompleted();
 ```
 
-Output:
+输出：
 
 ```
 1
@@ -264,15 +264,15 @@ contains completed
 Subject completed
 ```
 
-There is also an overload to `Contains` that allows you to specify an implementation of `IEqualityComparer<T>` other than the default for the type. This can be useful if you have a sequence of custom types that may have some special rules for equality depending on the use case.
+`Contains` 还有一个重载，允许你指定除类型默认以外的 `IEqualityComparer<T>` 实现。如果你有一个自定义类型的序列，可能会根据用例有一些特殊的相等规则，这会非常有用。
 
-## Build your own aggregations
+## 构建你自己的聚合
 
-If the built-in aggregations described in the preceding sections do not meet your needs, you can build your own. Rx provides two different ways to do this.
+如果前面章节中描述的内置聚合不满足你的需求，你可以构建自己的聚合。Rx 提供两种不同的方式来实现这一点。
 
 ### Aggregate
 
-The `Aggregate` method is very flexible: it is possible to build any of the operators shown so far in this chapter with it. You supply it with a function, and it invokes that function once for every element. But it doesn't just pass the element into your function: it also provides a way for your function to _aggregate_ information. As well as the current element, it also passes in an _accumulator_. The accumulator can be any type you like—it will depend on what sort of information you're looking to accumulate. Whatever value your function returns becomes the new accumulator value, and it will pass that into the function along with the next element from the source. There are a few variations on this, but the simplest overload looks like this:
+`Aggregate` 方法非常灵活：它可以构建本章中所示的任何操作符。你为它提供一个函数，它会为每个元素调用这个函数。但它不仅将元素传递给你的函数：它还提供了一种方式让你的函数 _聚合_ 信息。除了当前元素，它还传入一个 _累加器_。累加器可以是任何类型，这取决于你希望累积的信息类型。你的函数返回的任何值都将成为新的累加器值，并且它将与源的下一个元素一起传递给该函数。这里有几种变体，但最简单的重载如下：
 
 ```csharp
 IObservable<TSource> Aggregate<TSource>(
@@ -280,80 +280,80 @@ IObservable<TSource> Aggregate<TSource>(
     Func<TSource, TSource, TSource> accumulator)
 ```
 
-If you wanted to produce your own version of `Count` for `int` values, you could do so by providing a function that just adds 1 for each value the source produces:
+如果你想为 `int` 值产生自己的 `Count` 版本，你可以提供一个函数，只需每个源产生的值加1：
 
 ```csharp
 IObservable<int> sum = source.Aggregate((acc, element) => acc + 1);
 ```
 
-To understand exactly what this is doing, let's look at how `Aggregate` will call this lambda. To make that slightly easier to see, suppose we put that lambda in its own variable:
+为了更准确地理解这是如何处理的，让我们看看 `Aggregate` 如何调用这个 lambda。为了更容易看到，假设我们将这个 lambda 放在自己的变量中：
 
 ```csharp
 Func<int, int, int> c = (acc, element) => acc + 1;
 ```
 
-Now suppose the source produces an item with the value 100. `Aggregate` will invoke our function:
+现在假设源产生了一个值 100。`Aggregate` 会调用我们的函数：
 
 ```csharp
-c(0, 100) // returns 1
+c(0, 100) // 返回 1
 ```
 
-The first argument is the current accumulator. `Aggregate` has used `default(int)` for the initial accumulator value, which is 0. Our function returns 1, which becomes the new accumulator value. So if the source produces a second value, say, 200, `Aggregate` will pass the new accumulator, along with the second value from the source:
+第一个参数是当前的累加器。`Aggregate` 使用了 `default(int)` 作为初始累加器值，即 0。我们的函数返回 1，这成为新的累加器值。因此，如果源产生第二个值，比如 200，`Aggregate` 将使用新的累加器以及来自源的第二个值：
 
 ```csharp
-c(1, 200) // returns 2
+c(1, 200) // 返回 2
 ```
 
-This particular function completely ignores its second argument (the element from the source). It just adds one to the accumulator each time. So the accumulator is nothing more than a record of the number of times our function has been called.
+这个特定的函数完全忽略了它的第二个参数（源的元素）。它只是每次将累加器加一。因此，累加器仅仅是我们的函数被调用次数的记录。
 
-Now let's look at how we might implement `Sum` using `Aggregate`:
+现在，让我们看看如何使用 `Aggregate` 实现 `Sum`：
 
 ```csharp
-Func<int, int, int> s = (acc, element) => acc + element
+Func<int, int, int> s = (acc, element) => acc + element;
 IObservable<int> sum = source.Aggregate(s);
 ```
 
-For the first element, `Aggregate` will again pass the default value for our chosen accumulator type, `int`: 0. And it will pass the first element value. So again if the first element is 100 it does this:
+对于第一个元素，`Aggregate` 会再一次传递我们选择的累加器类型的默认值 `int`：0。它还会传递第一个元素值。所以如果第一个元素是 100，它会这样做：
 
 ```csharp
-s(0, 100) // returns 100
+s(0, 100) // 返回 100
 ```
 
-And then if the second element is 200, `Aggregate` will make this call:
+然后如果第二个元素是 200，`Aggregate` 将进行此调用：
 
 ```csharp
-s(100, 200) // returns 300
+s(100, 200) // 返回 300
 ```
 
-Notice that this time, the first argument was 100, because that's what the previous invocation of `s` returned. So in this case, after seeing elements 100 and 200, the accumulator's value is 300, which is the sum of all the elements.
+注意，这次第一个参数是 100，因为这是上一次调用 `s` 返回的值。因此，在这种情况下，看到元素 100 和 200 后，累加器的值是 300，这是所有元素的总和。
 
-What if we want the initial accumulator value to be something other than `default(TAccumulator)`? There's an overload for that. For example, here's how we could implement something like `All` with `Aggregate`:
+如果我们希望初始累加器值不是 `default(TAccumulator)`，有一个重载可以实现。例如，这里是如何使用 `Aggregate` 实现类似于 `All` 的东西：
 
 ```csharp
 IObservable<bool> all = source.Aggregate(true, (acc, element) => acc && element);
 ```
 
-This isn't exactly equivalent to the real `All` by the way: it handles errors differently. `All` instantly unsubscribes from its source if it sees a single element that is `false`, because it knows that nothing else the source produces can possibly change the outcome. That means that if the source had been about to produce an error, it will no longer have the opportunity to do so because `All` unsubscribed. But `Aggregate` has no way of knowing that the accumulator has entered a state from which it can never leave, so it will remain subscribed to the source until the source completes (or until whichever code subscribed to the `IObservable<T>` returned by `Aggregate` unsubscribes). This means that if the source were to produce `true`, then `false`, `Aggregate` would, unlike `All`, remain subscribed to the source, so if the source goes on to call `OnError`, `Aggregate` will receive that error, and pass it on to its subscriber.
+顺便说一句，这与真正的 `All` 并不完全相同：它对错误的处理方式不同。`All` 一旦看到一个元素是 `false` 就会立即从其源取消订阅，因为它知道源产生的其他任何东西都不可能改变结果。这意味着，如果源即将产生错误，它将不再有机会这样做，因为 `All` 取消了订阅。但是 `Aggregate` 没有办法知道累加器是否已经进入了一个永远无法离开的状态，所以它将一直订阅源，直到源完成（或直到订阅 `IObservable<T>` 的代码取消订阅为止）。这意味着，如果源先产生 `true`，然后是 `false`，`Aggregate` 会与 `All` 不同，仍然订阅源，所以如果源继续调用 `OnError`，`Aggregate` 会收到这个错误，并将其传递给它的订阅者。
 
-Here's a way to think about `Aggregate` that some people find helpful. If your source produces the values 1 through 5, and if the function we pass to `Aggregate` is called `f`, then the value that `Aggregate` produces once the source completes will be this:
+这是一些人发现有用的关于 `Aggregate` 的思考方式。如果你的源产生了 1 到 5 的值，而我们传递给 `Aggregate` 的函数被称为 `f`，那么一旦源完成，`Aggregate` 产生的值将是这样的：
 
 ```csharp
-T result = f(f(f(f(f(default(T), 1), 2), 3), 4), 5);
+T result = f(f(f(f(f(default(T), 1), 顺序=headers]))), 5);
 ```
 
-So in the case of our recreation of `Count`, the accumulator type was `int`, so that becomes:
+因此，在我们重新创建 `Count` 的情况下，累加器类型是 `int`，变成了：
 
 ```csharp
 int sum = s(s(s(s(s(0, 1), 2), 3), 4), 5);
-// Note: Aggregate doesn't return this directly -
-// it returns an IObservable<int> that produces this value.
+// 注意：Aggregate 不会直接返回这个 -
+// 它返回一个 IObservable<int>，这个值产生这个值。
 ```
 
-Rx's `Aggregate` doesn't perform all those invocations at once: it invokes the function each time the source produces an element, so the calculations will be spread out over time. If your callback is a _pure function_—one that is unaffected by global variables and other environmental factors, and which will always return the same result for any particular input—this doesn't matter. The result of `Aggregate` will be the same as if it had all happened in one big expression like the preceding example. But if your callback's behaviour is affected by, say, a global variable, or by the current contents of the filesystem, then the fact that it will be invoked when the source produces each value may be more significant.
+Rx 的 `Aggregate` 不会一次执行所有这些调用：它在源产生每个元素时调用函数，因此计算将分散在一段时间内。如果你的回调是一个_纯函数_——一个不受全局变量和其他环境因素影响的函数，且对于任何特定的输入总是返回相同结果的函数——这无关紧要。`Aggregate` 的结果将与它一直在一个大表达式中进行的情况相同。但如果你的回调行为受到全局变量或文件系统的当前内容等因素的影响，那么它在源产生每个值时被调用的事实可能更为重要。
 
-`Aggregate` has other names in some programming systems by the way. Some systems call it `reduce`. It is also often referred to as a _fold_. (Specifically a _left fold_. A right fold proceeds in reverse. Conventionally its function takes arguments in the reverse order, so it would look like `s(1, s(2, s(3, s(4, s(5, 0)))))`. Rx does not offer a built-in right fold. It would not be a natural fit because it would have to wait until it received the final element before it could begin, meaning it would need to hold onto every element in the entire sequence, and then evaluate the entire fold at once when the sequence completes.)
+顺便说一下，`Aggregate` 在某些编程系统中被称为 `reduce`。它也常被称为_折叠_。（具体来说是_左折叠_。右折叠是反向进行的。按照惯例，它的函数接受反向顺序的参数，因此看起来像 `s(1, s(2, s(3, s(4, s(5, 0)))))`。Rx 没有提供内置的右折叠。它不是自然的选择，因为它必须等到接收到最后一个元素才能开始，这意味着它需要保存整个序列中的每个元素，然后在序列完成时一次计算整个折叠。)
 
-You might have spotted that in my quest to re-implement some of the built-in aggregation operators, I went straight from `Sum` to `Any`. What about `Average`? It turns out we can't do that with the overloads I've shown you so far. And that's because `Average` needs to accumulate two pieces of information—the running total and the count—and it also needs to perform once final step right at the end: it needs to divide the total by the count. With the overloads shown so far, we can only get part way there:
+你可能已经注意到，在我追求用 `Aggregate` 重新实现一些内置的聚合操作符的过程中，我直接从 `Sum` 跳到 `Any`。`Average` 怎么样呢？事实证明，我们不能用到目前为止向你展示的重载来完成。这是因为 `Average` 需要累积两个信息——总和和计数——它还需要在最后执行一次最终步骤：它需要将总和除以计数。利用到目前为止所示的重载，我们只能完成一部分：
 
 ```csharp
 IObservable<int> nums = Observable.Range(1, 5);
@@ -363,7 +363,7 @@ IObservable<(int Count, int Sum)> avgAcc = nums.Aggregate(
     (acc, element) => (Count: acc.Count + 1, Sum: acc.Sum + element));
 ```
 
-This uses a tuple as the accumulator, enabling it to accumulate two values: the count and the sum. But the final accumulator value becomes the result, and that's not what we want. We're missing that final step that calculates the average by dividing the sum by the count. Fortunately, `Aggregate` offers a 3rd overload that enables us to provide this final step. We pass a second callback which will be invoked just once when the source completes. `Aggregate` passes the final accumulator value into this lambda, and then whatever it returns becomes the single item produced by the observable that `Aggregate` returns.
+此处使用一个元组作为累加器，使其能够累积两个值：计数和总和。但最终的累加器值成为结果，这不是我们想要的。我们缺少通过除以计数来计算平均值的最后一步。幸运的是，`Aggregate` 提供了第三个重载，使我们能够提供这个最后的步骤。我们传递第二个回调，当来源完成时将被调用一次。`Aggregate` 将最终的累加器值传递给这个 lambda，然后它返回的任何东西都会成为 `Aggregate` 返回的可观察对象产生的单个项目。
 
 ```csharp
 IObservable<double> avg = nums.Aggregate(
@@ -372,9 +372,9 @@ IObservable<double> avg = nums.Aggregate(
     acc => ((double) acc.Sum) / acc.Count);
 ```
 
-I've been showing how `Aggregate` can re-implement some of the built-in aggregation operators to illustrate that it is a powerful and very general operator. However, that's not what we use it for. `Aggregate` is useful precisely because it lets us define custom aggregation.
+我展示了如何使用 `Aggregate` 重新实现一些内置的聚合操作符，以说明它是一个功能强大且非常通用的操作符。然而，我们使用它的原因并不是这个。`Aggregate` 之所以有用，是因为它让我们定义自定义聚合。
 
-For example, suppose I wanted to build up a list of the names of all the ships that have broadcast their details over AIS. Here's one way to do that:
+例如，假设我想要构建一个列表，列出通过AIS广播其详细信息的所有船只的名称。这里有一种方法可以做到这一点：
 
 ```csharp
 IObservable<IReadOnlySet<string>> allNames = vesselNames
@@ -384,7 +384,7 @@ IObservable<IReadOnlySet<string>> allNames = vesselNames
         (set, name) => set.Add(name.VesselName));
 ```
 
-I've used `ImmutableHashSet<string>` here because its usage patterns happen to fit `Aggregate` neatly. An ordinary `HashSet<string>` would also have worked, but is a little less convenient because its `Add` method doesn't return the set, so our function needs an extra statement to return the accumulated set:
+我在这里使用了 `ImmutableHashSet<string>`，因为它的使用模式恰好很好地适应了 `Aggregate`。一个普通的 `HashSet<string>` 也可以工作，但使用起来稍微不那么方便，因为它的 `Add` 方法不返回集合，所以我们的函数需要额外的语句来返回累积的集合：
 
 ```csharp
 IObservable<IReadOnlySet<string>> allNames = vesselNames
@@ -398,15 +398,15 @@ IObservable<IReadOnlySet<string>> allNames = vesselNames
         });
 ```
 
-With either of these implementations, `vesselNames` will produce a single value that is a `IReadOnlySet<string>` containing each vessel name seen in the first 10 messages that report a name.
+无论是哪种实现，`vesselNames` 都会生成一个值，这是一个 `IReadOnlySet<string>`，包含前10条报告名字的消息中看到的每个船只的名字。
 
-I've had to fudge an issue in these last two examples. I've made them work over just the first 10 suitable messages to emerge. Think about what would happen if I didn't have the `Take(10)` in there. The code would compile, but we'd have a problem. The AIS message source I've been using in various examples is an endless source. Ships will continue to move around the oceans for the foreseeable future. Ais.NET does not contain any code designed to detect either the end of civilisation, or the invention of technologies that will render the use of ships obsolete, so it will never call `OnCompleted` on its subscribers. The observable returned by `Aggregate` reports nothing until its source either completes or fails. So if we remove that `Take(10)`, the behaviour would be identical `Observable.Never<IReadOnlySet<string>>`. I had to force the input to `Aggregate` to come to an end to make it produce something. But there is another way.
+我在这两个最后的例子中已经简化了一个问题。我让它们在首次出现的10条合适的消息中工作。想想如果我没有在那里加入 `Take(10)` 会发生什么。代码会编译，但我们会遇到一个问题。我在各种示例中使用的AIS消息源是一个无休止的源。船只将在可预见的未来继续在海洋中移动。Ais.NET库没有包含任何代码来检测文明的终结，或技术的发明将使使用船只过时，所以它永远不会对其订阅者调用 `OnCompleted`。`Aggregate` 返回的可观测对象在其源完成或失败之前不会报告任何内容。所以如果我们去掉那个 `Take(10)`，行为将与 `Observable.Never<IReadOnlySet<string>>` 相同。我不得不强制输入到 `Aggregate` 的结束才使它产生一些东西。但还有另一种方式。
 
 ### Scan
 
-While `Aggregate` allows us to reduce complete sequences to a single, final value, sometimes this is not what we need. If we are dealing with an endless source, we might want something more like a running total, updated each time we receive a value. The `Scan` operator is designed for exactly this requirement. The signatures for both `Scan` and `Aggregate` are the same; the difference is that `Scan` doesn't wait for the end of its input. It produces the aggregated value after every item.
+虽然 `Aggregate` 允许我们将完整序列简化为单个最终值，但有时这不是我们需要的。如果我们正在处理一个无尽的源，我们可能需要类似于实时总计的东西，每次接收到值时都会更新。`Scan` 操作符正是为这种需求设计的。`Scan` 和 `Aggregate` 的签名相同；区别在于 `Scan` 不会等待其输入的结束。它在每个项目之后都会生成聚合值。
 
-We can use this to build up a set of vessel names as in the preceding section, but with `Scan` we don't have to wait until the end. This will report the current list every time it receives a message containing a name:
+我们可以使用它来建立船只名称集合，就像前一节中所述，但使用 `Scan` 我们不必等到结束。这将在每次接收到包含名称的消息时报告当前列表：
 
 ```csharp
 IObservable<IReadOnlySet<string>> allNames = vesselNames
@@ -415,9 +415,9 @@ IObservable<IReadOnlySet<string>> allNames = vesselNames
         (set, name) => set.Add(name.VesselName));
 ```
 
-Note that this `allNames` observable will produce elements even if nothing has changed. If the accumulated set of names already contained the name that just emerged from `vesselNames`, the call to `set.Add` will do nothing, because that name will already be in the set. But `Scan` scan produces one output for each input, and doesn't care if the accumulator didn't change. Whether this matters will depend on what you are planning to do with this `allNames` observable, but if you need to, you can fix this easily with the [`DistinctUntilChanged` operator shown in chapter 5](05_Filtering.md#distinct-and-distinctuntilchanged).
+请注意，即使没有变化，这个 `allNames` 可观测对象也会产生元素。如果累积的名称集已经包含刚从 `vesselNames` 中产生的名称，对 `set.Add` 的调用将不起作用，因为该名称已经在集合中了。但 `Scan` 为每个输入产生一个输出，并不关心累加器是否没有改变。这是否重要将取决于你打算如何使用这个 `allNames` 可观测对象，但如果需要，你可以很容易地用[第五章中展示的 `DistinctUntilChanged` 操作符](05_Filtering.md#distinct-and-distinctuntilchanged)修复这个问题。
 
-You could think of `Scan` as being a version of `Aggregate` that shows its working. If we wanted to see how the process of calculating an average aggregates the count and sum, we could write this:
+你可以将 `Scan` 视为是展示其工作过程的 `Aggregate` 版本。如果我们想看到计算平均值的过程如何累积计数和总和，我们可以写下这个：
 
 ```csharp
 IObservable<int> nums = Observable.Range(1, 5);
@@ -429,7 +429,7 @@ IObservable<(int Count, int Sum)> avgAcc = nums.Scan(
 avgAcc.Dump("acc");
 ```
 
-That produces this output:
+这产生了这样的输出：
 
 ```
 acc-->(1, 1)
@@ -440,9 +440,9 @@ acc-->(5, 15)
 acc completed
 ```
 
-You can see clearly here that `Scan` is emitting the current accumulated values each time the source produces a value.
+你可以清楚地看到 `Scan` 在源每次产生值时都发出当前累积值。
 
-Unlike `Aggregate`, `Scan` doesn't offer an overload taking a second function to transform the accumulator into the result. So we can see the tuple containing the count and sum here, but not the actual average value we want. But we can achieve that by using the [`Select`](06_Transformation.md#select) operator described in the [Transformation chapter](06_Transformation.md):
+与 `Aggregate` 不同，`Scan` 不提供一个采用第二个函数来转换累加器到结果的重载。因此我们在这里可以看到包含计数和总和的元组，但不是我们想要的实际平均值。但我们可以通过使用[变换章节中描述的 `Select`](06_Transformation.md#select) 操作符来实现这一点：
 
 ```csharp
 IObservable<double> avg = nums.Scan(
@@ -453,7 +453,7 @@ IObservable<double> avg = nums.Scan(
 avg.Dump("avg");
 ```
 
-Now we get this output:
+现在我们得到了这样的输出：
 
 ```
 avg-->1
@@ -464,12 +464,12 @@ avg-->3
 avg completed
 ```
 
-`Scan` is a more generalised operator than `Aggregate`. You could implement `Aggregate` by combining `Scan` with the [`TakeLast()` operator described in the Filtering chapter](05_Filtering.md#takelast).
+`Scan` 是比 `Aggregate` 更一般化的操作符。你可以通过将 `Scan` 与[过滤章节中描述的 `TakeLast()` 操作符](05_Filtering.md#takelast) 结合使用来实现 `Aggregate`。
 
 ```csharp
 source.Aggregate(0, (acc, current) => acc + current);
-// is equivalent to 
+// 等效于
 source.Scan(0, (acc, current) => acc + current).TakeLast();
 ```
 
-Aggregation is useful for reducing volumes of data or combining multiple elements to produce averages, or other measures that incorporate information from multiple elements. But to perform some kinds of analysis we will also need to slice up or otherwise restructure our data before calculating aggregated values. So in the next chapter we'll look at the various mechanisms Rx offers for partitioning data.
+聚合是用于减少数据量或结合多个元素以产生平均值或其他包含多个元素信息的度量的一种有用方法。但是，要执行某些类型的分析，我们还需要在计算聚合值之前对我们的数据进行切割或以其他方式重新组织。因此，在下一章中，我们将探讨 Rx 提供的用于分区数据的各种机制。

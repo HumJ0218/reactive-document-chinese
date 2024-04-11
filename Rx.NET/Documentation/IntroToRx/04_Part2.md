@@ -1,13 +1,13 @@
-# PART 2 - From Events to Insights 
+# 第2部分 - 从事件到洞察
 
-We live in an age where data is being created, stored, and distributed at a phenomenal rate. Consuming this data can be overwhelming, like trying to drink directly from a fire hose. We need the ability to identify the important data, meaning we need ways to determine what is and is not relevant. We need to take groups of data and process them collectively to discover patterns or other information that might not be apparent from any individual raw input. Users, customers and managers need to do this with more data than ever before, while still delivering higher performance and more useful outputs.
+我们生活在一个数据以惊人速度被创造、存储和分发的时代。消费这些数据可以是压倒性的，就像试图直接从消防栓喝水一样。我们需要能力识别重要的数据，这意味着我们需要方法来确定什么是和不是相关的。我们需要将数据分组并集体处理它们，以发现可能从任何单个原始输入中都不明显的模式或其他信息。用户、客户和经理需要处理比以往更多的数据，同时仍然提供更高的性能和更有用的输出。
 
-Rx provides some powerful mechanisms for extracting meaningful insights from raw data streams. This is one of the main reasons for representing information as `IObservable<T>` streams in the first place. The preceding chapter showed how to create an observable sequence, so now we will look at how to exploit the power this has unlocked using the the various Rx methods that can process and transform an observable sequence. 
+Rx 提供了一些强大的机制，从原始数据流中提取有意义的洞察。这是首先将信息表示为 `IObservable<T>` 流的主要原因之一。前一章展示了如何创建一个可观察序列，所以现在我们将看看如何利用这种能力，使用各种 Rx 方法来处理和转换可观察序列。
 
-Rx supports most of the standard LINQ operators. It also defines numerous additional operators. These fall broadly into categories, and each of the following chapters tackles one category:
+Rx 支持大多数标准的 LINQ 操作符。它还定义了许多额外的操作符。这些操作符大致分为几个类别，以下每一章都将处理一个类别：
 
-* [Filtering](05_Filtering.md)
-* [Transformation](06_Transformation.md)
-* [Aggregation](07_Aggregation.md)
-* [Partitioning](08_Partitioning.md)
-* [Combination](09_CombiningSequences.md)
+* [过滤](05_Filtering.md)
+* [转换](06_Transformation.md)
+* [聚合](07_Aggregation.md)
+* [分区](08_Partitioning.md)
+* [组合](09_CombiningSequences.md)

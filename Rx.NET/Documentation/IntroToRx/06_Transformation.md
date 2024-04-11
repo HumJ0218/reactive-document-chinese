@@ -1,12 +1,12 @@
-# Transformation of sequences
+# 序列的转换
 
-The values from the sequences we consume are not always in the format we need. Sometimes there is more information than we need, and we need to pick out just the values of interest. Sometimes each value needs to be expanded either into a richer object or into more values.
+我们消费的序列中的值并不总是我们需要的格式。有时候，信息量过多，我们需要挑选出我们感兴趣的值。有时候，每个值都需要扩展成一个更丰富的对象或更多的值。
 
-Up until now, we have looked at creation of sequences, transition into sequences, and, the reduction of sequences by filtering. In this chapter we will look at _transforming_ sequences.
+到目前为止，我们已经查看了序列的创建、序列的过渡，以及通过过滤来减少序列。在本章中，我们将研究**转换**序列。
 
 ## Select
 
-The most straightforward transformation method is `Select`. It allows you provide a function that takes a value of `TSource` and return a value of `TResult`. The signature for `Select` reflects its ability to transform a sequence's elements from one type to another type, i.e. `IObservable<TSource>` to `IObservable<TResult>`.
+最直接的转换方法是 `Select`。它允许你提供一个函数，这个函数接受一个 `TSource` 的值，并返回一个 `TResult` 的值。`Select` 的签名反映了它将序列元素从一种类型转换为另一种类型的能力，即从 `IObservable<TSource>` 到 `IObservable<TResult>`。
 
 ```csharp
 IObservable<TResult> Select<TSource, TResult>(
@@ -14,15 +14,15 @@ IObservable<TResult> Select<TSource, TResult>(
     Func<TSource, TResult> selector)
 ```
 
-You don't have to change the type—`TSource` and `TResult` can be the same if you want. This first example transforms a sequence of integers by adding 3, resulting in another sequence of integers.
+你不必更改类型——如果你愿意，`TSource` 和 `TResult` 可以是相同的。这个第一个示例通过添加3来转换整数序列，结果产生另一个整数序列。
 
 ```csharp
 IObservable<int> source = Observable.Range(0, 5);
-source.Select(i => i+3)
+source.Select(i => i + 3)
       .Dump("+3")
 ```
 
-This uses the `Dump` extension method we defined at the start of [the Filtering chapter](05_Filtering.md). It produces the following output:
+这使用了我们在[过滤章节](05_Filtering.md)开头定义的 `Dump` 扩展方法。它产生以下输出：
 
 ```
 +3 --> 3
@@ -33,7 +33,7 @@ This uses the `Dump` extension method we defined at the start of [the Filtering 
 +3 completed
 ```
 
-This next example transforms values in a way that changes their type. It converts integer values to characters.
+下一个示例以改变其类型的方式转换值。它将整数值转换为字符。
 
 ```csharp
 Observable.Range(1, 5);
@@ -41,7 +41,7 @@ Observable.Range(1, 5);
           .Dump("char");
 ```
 
-Output:
+输出：
 
 ```
 char --> A
@@ -52,7 +52,7 @@ char --> E
 char completed
 ```
 
-This example transforms our sequence of integers to a sequence where the elements have an anonymous type:
+这个例子将我们的整数序列转换为一个元素具有匿名类型的序列：
 
 ```csharp
 Observable.Range(1, 5)
@@ -60,7 +60,7 @@ Observable.Range(1, 5)
           .Dump("anon");
 ```
 
-Output:
+输出：
 
 ```
 anon --> { Number = 1, Character = A }
@@ -71,7 +71,7 @@ anon --> { Number = 5, Character = E }
 anon completed
 ```
 
-`Select` is one of the standard LINQ operators supported by C#'s query expression syntax, so we could have written that last example like this:
+`Select` 是由 C# 的查询表达式语法支持的标准 LINQ 操作符之一，因此我们可以这样写最后一个示例：
 
 ```csharp
 var query = from i in Observable.Range(1, 5)
@@ -80,11 +80,11 @@ var query = from i in Observable.Range(1, 5)
 query.Dump("anon");
 ```
 
-In Rx, `Select` has another overload, in which the `selector` function takes two values. The additional argument is the element's index in the sequence. Use this method if the index of the element in the sequence is important to your selector function.
+在 Rx 中，`Select` 还有另一个重载，在这个重载中，`selector` 函数接受两个值。额外的参数是元素在序列中的索引。如果序列中元素的索引对你的选择器函数很重要，就使用这种方法。
 
 ## SelectMany
 
-Whereas `Select` produces one output for each input, `SelectMany` enables each input element to be transformed into any number of outputs. To see how this can work, let's first look at an example that uses just `Select`:
+虽然 `Select` 为每个输入生成一个输出，`SelectMany` 允许每个输入元素转换为任意数量的输出。为了看到这是如何工作的，让我们先看一个仅使用 `Select` 的示例：
 
 ```csharp
 Observable
@@ -93,7 +93,7 @@ Observable
     .Dump("strings");
 ```
 
-which produces this output:
+这产生了以下输出：
 
 ```
 strings-->A
@@ -104,7 +104,7 @@ strings-->EEEEE
 strings completed
 ```
 
-As you can see, for each of the numbers produced by `Range`, our output contains a string whose length is that many characters. What if, instead of transforming each number into a string, we transformed it into an `IObservable<char>`. We can do that just by adding `.ToObservable()` after constructing the string:
+如你所见，对于 `Range` 产生的每个数字，我们的输出包含一个字符串，其长度就是那么多字符。如果我们不是将每个数字转换为一个字符串，而是将其转换为一个 `IObservable<char>` 呢？我们可以通过在构造字符串后添加 `.ToObservable()` 来做到这一点：
 
 ```csharp
 Observable
@@ -113,7 +113,7 @@ Observable
     .Dump("sequences");
 ```
 
-(Alternatively, we could have replaced the selection expression with `i => Observable.Repeat((char)(i+64), i)`. Either has exactly the same effect.) The output isn't terribly useful:
+(或者，我们可以将选择表达式替换为 `i => Observable.Repeat((char)(i+64), i)`。二者的效果完全相同。) 输出不是很有用：
 
 ```
 strings-->System.Reactive.Linq.ObservableImpl.ToObservableRecursive`1[System.Char]
@@ -124,7 +124,7 @@ strings-->System.Reactive.Linq.ObservableImpl.ToObservableRecursive`1[System.Cha
 strings completed
 ```
 
-We have an observable sequence of observable sequences. But look at what happens if we now replace that `Select` with a `SelectMany`:
+我们有一个可观察序列的可观察序列。但看看如果我们现在将 `Select` 替换为 `SelectMany` 会发生什么：
 
 ```csharp
 Observable
@@ -133,7 +133,7 @@ Observable
     .Dump("chars");
 ```
 
-This gives us an `IObservable<char>`, with this output:
+这给了我们一个 `IObservable<char>`，输出如下：
 
 ```
 chars-->A
@@ -154,9 +154,9 @@ chars-->E
 chars completed
 ```
 
-The order has become a little scrambled, but if you look carefully you'll see that the number of occurrences of each letter is the same as when we were emitting strings. There is just one `A`, for example, but `C` appears three times, and `E` five times.
+顺序有些打乱，但仔细观察，你会看到每个字母出现的次数与我们发出字符串时相同。例如，只有一个 `A`，但是 `C` 出现了三次，`E` 出现了五次。
 
-`SelectMany` expects the transformation function to return an `IObservable<T>` for each input, and it then combines the result of those back into a single result. The LINQ to Objects equivalent is a little less chaotic. If you were to run this:
+`SelectMany` 期望建议转换函数返回一个 `IObservable<T>` 输入，并将这些结果合并回一个单一结果中。`Enumerable.SelectMany` 转换功能与对象不一样混乱若干，如果使用对象：
 
 ```csharp
 Enumerable
@@ -165,27 +165,27 @@ Enumerable
     .ToList()
 ```
 
-it would produce a list with these elements:
+它会产生一个包含以下元素的列表：
 
 ```
 [ A, B, B, C, C, C, D, D, D, D, E, E, E, E, E ]
 ```
 
-The order is less odd. It's worth exploring the reasons for this in a little more detail.
+顺序更加规整。这在[调度和线程章节](11_SchedulingAndThreading.md)中有更详细的解释。
 
-### `IEnumerable<T>` vs. `IObservable<T>` `SelectMany`
+### `IEnumerable<T>` 与 `IObservable<T>` 的 `SelectMany`
 
-`IEnumerable<T>` is pull based—sequences produce elements only when asked. `Enumerable.SelectMany` pulls items from its sources in a very particular order. It begins by asking its source `IEnumerable<int>` (the one returned by `Range` in the preceding example) for the first value. `SelectMany` then invokes our callback, passing this first item, and then enumerates everything in the `IEnumerable<char>` our callback returns. Only when it has exhausted this does it ask the source (`Range`) for a second item. Again, it passes that second item to our callback and then fully enumerates the `IEnumerable<char>`, we return, and so on. So we get everything from the first nested sequence first, then everything from the second, etc.
+`IEnumerable<T>` 是基于拉取的——序列仅在被询问时产生元素。`Enumerable.SelectMany` 以一种非常特别的顺序从其源拉取项目。它首先询问其源 `IEnumerable<int>`（上述示例中由 `Range` 返回的）获取第一个值。然后 `SelectMany` 调用我们的回调，传递这第一个项目，然后枚举我们的回调返回的 `IEnumerable<char>` 中的所有内容。只有当它耗尽这个时，它才会向源 (`Range`) 请求第二个项目。再次，它将第二个项目传递给我们的回调，然后完全枚举我们返回的 `IEnumerable<char>`，依此类推。所以我们首先得到第一个嵌套序列中的所有内容，然后是第二个，等等。
 
-`Enumerable.SelectMany` is able to proceed in this way for two reasons. First, the pull-based nature of `IEnumerable<T>` enables it to decide on the order in which it processes things. Second, with `IEnumerable<T>` it is normal for operations to block, i.e., not to return until they have something for us. When the preceding example calls `ToList`, it won't return until it has fully populated a `List<T>` with all of the results.
+`Enumerable.SelectMany` 能够以此方式进行的原因有两个。首先，`IEnumerable<T>` 的基于拉取的特性使它能够决定处理事物的顺序。其次，对于 `IEnumerable<T>` 来说，阻塞操作是正常的，即，它们不返回任何东西，直到它们有东西为我们提供。当前面的示例调用 `ToList` 时，它不会返回，直到它用所有结果完全填充了一个 `List<T>`。
 
-Rx is not like that. First, consumers don't get to tell sources when to produce each item—sources emit items when they are ready to. Second, Rx typically models ongoing processes, so we don't expect method calls to block until they are done. There are some cases where Rx sequences will naturally produce all of their items very quickly and complete as soon as they can, but the kinds of information sources that we tend to want model with Rx typically don't behave that way. So most operations in Rx do not block—they immediately return something (such as an `IObservable<T>`, or an `IDisposable` representing a subscription) and will then produce values later.
+Rx 的情况不是这样的。首先，消费者无法告诉源何时产生每个项目——源在准备好时发出项目。其次，Rx 通常模型的是持续进行的过程，所以我们通常不期望方法调用会阻塞直到它们完成。有些情况下 Rx 序列会自然地非常迅速地产生它们的所有项目，并尽快完成，但是我们倾向于用 Rx 建模的信息源通常不会以这种方式表现。所以 Rx 中的大多数操作都不会阻塞——它们会立即返回一些东西（例如 `IObservable<T>` 或代表订阅的 `IDisposable`），然后稍后产生值。
 
-The Rx version of the example we're currently examining is in fact one of these unusual cases where each of the sequences emits items as soon as it can. Logically speaking, all of the nested `IObservable<char>` sequences are in progress concurrently. The result is a mess because each of the observable sources here attempts to produce every element as quickly as the source can consume them. The fact that they end up being interleaved has to do with the way these kinds of observable sources use Rx's _scheduler_ system, which we will describe in the [Scheduling and Threading chapter](11_SchedulingAndThreading.md). Schedulers ensure that even when we are modelling logically concurrent processes, the rules of Rx are maintained, and observers of the output of `SelectMany` will only be given one item at a time. The following marble diagram shows the events that lead to the scrambled output we see:
+我们当前正在检查的 Rx 示例实际上是这些不寻常情况之一，其中每个序列尽快发出项目。从逻辑上讲，所有嵌套的 `IObservable<char>` 序列同时进行。结果是一团糟，因为这里的每个可观察源都试图尽可能快地生产每个元素，因为源可以消耗它们。它们最终被交错的原因与这些类型的可观察源使用 Rx 的调度系统有关，我们将在[调度和线程章节](11_SchedulingAndThreading.md)中描述。调度器确保即使在我们以逻辑上并发的过程建模时，Rx 的规则也被维护，并且 `SelectMany` 的输出观察者一次只会得到一个项目。下面的弹珠图展示了导致我们看到的混乱输出的事件：
 
-![An Rx marble diagram showing 7 observables. The first illustrates the Range operator producing the values 1 through 5. These are colour coded as follows: green, blue, yellow, red, and pink. These colours correspond to observables further down in the diagram, as will be described shortly. The items in this first observable are not evenly spaced. The 2nd value immediately follows the 1st, but there are gaps before the 3rd, 4th, and 5th items. These gaps correspond with activity shown further down in the diagram. Beneath the first observable is code invoking the SelectMany operator, passing this lambda: "i => new string((char)(i+64),i).ToObservable()". Beneath this are 6 more observables. The first 5 show the individual observables that the lambda produces for each of the inputs. These are colour coded to show how they correspond: the first observable's item is green, to indicate that this observable corresponds to the first item emitted by Range, the second observable's items are blue showing that it corresponds to the second item emitted by Range, and so on with the same colour sequence as described earlier for Range. Each observable's first item is aligned horizontally with the corresponding item from Range, signifying the fact that each one of these observables starts when the Range observable emits a value. These 5 observables show the values produced by the observable returned by the lambda for each of the 5 values from Range. The first of these child observables shows a single item with value 'A', vertically aligned with the value 1 from the Range observable to indicate that this item is produced immediately when Range produces its first value. This child observable then immediately ends, indicating that only one item was produced. The second child observable contains two 'B' values, the third three 'C' values, the fourth four 'D' values and the fifth give 'E' values. The horizontal positioning of these items indicates that all of first 6 observables in the diagram (the Range observable, and the 5 observables produced by the lambda) overlap to some extent. Initially this overlap is minimal: the first of the lambda-produced observables starts at the same time the Range produces its first value so these two observables overlap, but since this first child completes immediately it overlaps with nothing else. The second child starts when Range produces its second value, and manages to produce two values and then completes before anything else happens, so thus far, the child observables produced by the lambda overlap only with the Range one, and not with each other. However, when Range produces its third value, the resulting child observable produces two 'C' values, but the next thing that happens (as denoted by the horizontal position of the items) is that Range manages to produce its 4th value and its corresponding child observable produces the first of its 'D' values next. After this, the third child observable produces its third and final 'C', so this third child overlaps not just with the Range observable, but also with the fourth child. Then the fourth observable produces its second 'D'. Then the Range produces its fifth and final value, and the corresponding child observable produces its first 'E'. Then the fourth and fifth child observable alternate, producing 'D', 'E' and 'D', at which point the fourth child observable is complete, and now the fifth child observable produces its final three 'E' values without interruption, because by this time it is the only observable still running. At the bottom of the diagram is the 7th observable representing the output of the SelectMany. This shows all the of the values from each of the 5 child observables each with the exact same horizontal position (signifying that the observable returned by SelectMany produces a value whenever any of its child observables produces a value). So we can see that this output observable produces the sequence 'ABBCCDCDEDEDEEE', which is exactly what we saw in the example output earlier.](GraphicsIntro/Ch06-Transformation-Marbles-Select-Many-Marbles.svg)
+![一个 Rx 弹珠图展示 7 个可观测变量。第一个展示了 Range 操作员产生 1 到 5 的值。这些颜色编码如下:绿色，蓝色，黄色，红色和粉红色。这些颜色对应于图中进一步向下的可观察变量，将在不久的将来进行描述。这个第一个可观察变量中的项目并不均匀分布。第 2 个值紧跟在第 1 个值之后，但在第 3、4、5 个项目之前有间隙。这些间隙与图中进一步显示的活动相对应。在第一个可观察变量的下方是调用 SelectMany 操作符的代码，传递此 lambda: "i => new string((char)(i+64),i).ToObservable()"。在此之下是另外 6 个可观测变量。前 5 个显示 lambda 为每个输入生成的单独的可观察变量。这些颜色编码显示了它们是如何对应的:第一个可观察变量的项目是绿色的，表明这个可观察变量对应于 Range 发出的第一个项目，第二个可观察变量的项目是蓝色的，显示它对应于 Range 发出的第二个项目，以此类推，颜色序列与之前为 Range 描述的相同。每个可观察变量的第一个项目在水平方向上与来自 Range 的相应项目对齐，表明每个这样的可观察变量在 Range 发出一个值时开始。这 5 个可观察变量显示 lambda 为 Range 的 5 个值返回的可观察变量生成的值。这些子可观察变量中的第一个显示一个值为 'A' 的单个项目，垂直对齐 Range 可观察变量的值 1，表明这个项目是在 Range 产生其第一个值时立即产生的。这个子可观测变量然后立即结束，表明只生产了一个项目。第二个子可观察变量包含两个 'B' 值，第三个三个 'C' 值，第四个四个 'D' 值，第五个五个 'E' 值。这些项目的水平位置表明图中的前 6 个可观测变量（Range 可观察变量和 lambda 产生的 5 个可观察变量）在某种程度上重叠。最初，这种重叠是最小的:lambda 产生的第一个可观察变量在 Range 产生其第一个值的同时开始，因此这两个可观测变量重叠，但由于这第一个子项立即完成，因此它与其他任何内容都不重叠。第二个子项在 Range 产生其第二个值时开始，并设法在发生其他任何事情之前产生两个值，然后完成，因此到目前为止，lambda 产生的子可观测范围仅与 Range 重叠，而不是彼此重叠。但是，当 Range 产生其第三个值时，由此产生的子可观察变量产生了两个 'C' 值，但接下来发生的事情（由项目的水平位置表示）是，Range 管理产生其第 4 个值，以及其对应的子可观察变量产生第一个 'D' 值。接着，第三个子可观察变量产生了其第三个和最后一个 'C'，因此这第三个子不仅与 Range 可观察变量重叠，而且还与第四个子重叠。然后第四个可观察变量产生了第二个'D'。然后 Range 产生了第五个也是最后一个值，相应的子可观察变量产生了第一个 'E'。然后第四个和第五个子可观测变量交替产生 'D'，'E' 和 'D'，此时第四个子可观察变量完成，现在第五个子可观察变量产生了其最后三个 'E' 值，因为此时它是唯一仍在运行的可观察变量。在图的底部是表示 SelectMany 输出的第 7 个可观察变量。这显示了来自每个 5 个子可观察变量的所有值，每个水平位置都完全相同（表明 SelectMany 返回的可观察变量在其任何子可观察变量产生值时产生一个值）。因此，我们可以看到这个输出可观察变量生成的序列 'ABBCCDCDEDEDEEE'，这正是我们在前面的示例输出中看到的。](GraphicsIntro/Ch06-Transformation-Marbles-Select-Many-Marbles.svg)
 
-We can make a small tweak to prevent the child sequences all from trying to run at the same time. (This also uses `Observable.Repeat` instead of the rather indirect route of constructing a `string` and then calling `ToObservable` on that. I did that in earlier examples to emphasize the similarity with the LINQ to Objects example, but you wouldn't really do it that way in Rx.)
+我们可以对代码稍作修改，防止子序列同时尝试运行。（这还使用了 `Observable.Repeat`，而不是之前示例中构造一个 `string` 然后调用 `ToObservable` 的相对间接的方法。我之前是这样做的，是为了强调与 LINQ to Objects 示例的相似性，但实际上在 Rx 中你不会真的那样做。）
 
 ```csharp
 Observable
@@ -196,7 +196,7 @@ Observable
     .Dump("chars");
 ```
 
-Now we get output consistent with the `IEnumerable<T>` version:
+现在我们得到了与 `IEnumerable<T>` 版本一致的输出：
 
 ```
 chars-->A
@@ -217,11 +217,11 @@ chars-->E
 chars completed
 ```
 
-This clarifies that `SelectMany` lets you produce a sequence for each item that the source produces, and to have all of the items from all of those new sequences flattened back out into one sequence that contains everything. While that might make it easier to understand, you wouldn't want to introduce this sort of delay in reality purely for the goal of making it easier to understand. These delays mean it will take about a second and a half for all the elements to emerge. This marble diagram shows that the code above produces a sensible-looking ordering by making each child observable produce a little bunch of items, and we've just introduced dead time to get the separation:
+这表明 `SelectMany` 允许你为源产生的每一项生成一个序列，并将所有这些新序列中的所有项展开回一个包含所有内容的序列中。虽然这可能使其更容易理解，但实际上你并不希望仅仅为了让其更易于理解而引入这种延迟。这些延迟意味着所有元素出现大约需要一秒半的时间。这个弹珠图展示了上面的代码通过使每个子可观察对象产生一小堆项目，我们刚刚引入了停顿时间来产生合理的排序：
 
-![An Rx marble diagram which, like the preceding diagram, shows 7 observables. The first illustrates the Range operator producing the values 1 through 5. These are colour coded as follows: green, blue, yellow, red, and pink. These colours correspond to observables further down in the diagram, as will be described shortly.](GraphicsIntro/Ch06-Transformation-Marbles-Select-Many-Marbles-Delay.svg)
+![一个 Rx 弹珠图，如前一个图表一样，展示 7 个可观察变量。第一个展示了 Range 操作员产生的 1 到 5 的值。这些颜色编码如下：绿色，蓝色，黄色，红色和粉红色。这些颜色将在不久的将来在图中进一步描述。](GraphicsIntro/Ch06-Transformation-Marbles-Select-Many-Marbles-Delay.svg)
 
-I introduced these gaps purely to provide a slightly less confusing example, but if you really wanted this sort of strictly-in-order handling, you wouldn't use `SelectMany` in this way in practice. For one thing, it's not completely guaranteed to work. (If you try this example, but modify it to use shorter and shorter timespans, eventually you reach a point where the items start getting jumbled up again. And since .NET is not a real-time programming system, there's actually no safe timespan you can specific here that guarantees the ordering.) If you absolutely need all the items from the first child sequence before seeing any from the second, there's actually a robust way to ask for that:
+我仅仅引入这些间隙是为了提供一个稍微不那么混乱的示例，但如果你真的需要这种严格按顺序处理，实际上你不会以这种方式使用 `SelectMany`。首先，它不能完全保证能起作用。（如果你尝试这个示例，但将时间间隔修改得越来越短，最终你会达到项目开始混乱的点。由于 .NET 不是一个实时编程系统，实际上没有你可以指定的安全时间跨度来保证排序。）如果你绝对需要在看到第二个子序列的任何项目前看到第一个子序列的所有项目，有一种健壮的方法可以请求这个：
 
 ```csharp
 Observable
@@ -231,11 +231,11 @@ Observable
     .Dump("chars");
 ```
 
-However, that would not have been a good way to show what `SelectMany` does, since this no longer uses it. (It uses `Concat`, which will be discussed in the [Combining Sequences](09_CombiningSequences.md) chapter.) We use `SelectMany` either when we know we're unwrapping a single-valued sequence, or when we don't have specific ordering requirements, and want to take elements as and when they emerge from child observables.
+但是，这将不再使用 `SelectMany`。（它使用 `Concat`，将在[结合序列](09_CombiningSequences.md)章节中讨论。）我们使用 `SelectMany` 是当我们知道我们正在展开单值序列，或者当我们没有具体的排序要求，希望按照子可观察对象产生的元素来接受元素时。
 
-### The Significance of SelectMany
+### SelectMany 的重要性
 
-If you've been reading this book's chapters in order, you had already seen two examples of `SelectMany` in earlier chapters. The first example in the [**LINQ Operators and Composition** section of chapter 2](02_KeyTypes.md#linq-operators-and-composition) used it. Here's the relevant code:
+如果你按顺序阅读了本书的章节，你之前已经在前几章中看到了两个 `SelectMany` 的示例。第一个示例出现在第 2 章的[**LINQ 操作符和组合**部分](02_KeyTypes.md#linq-operators-and-composition)。这里是相关代码：
 
 ```csharp
 IObservable<int> onoffs =
@@ -247,19 +247,19 @@ IObservable<int> onoffs =
     select delta;
 ```
 
-(If you're wondering where the call to `SelectMany` is in that, remember that if a Query Expression contains two `from` clauses, the C# compiler turns those into a call to `SelectMany`.) This illustrates a common pattern in Rx, which might be described as fanning out, and then back in again.
+（如果你想知道哪里调用了 `SelectMany`，记住如果查询表达式包含两个 `from` 子句，C# 编译器会将这些转换为调用 `SelectMany`。）这展示了 Rx 中的一种常见模式，可以描述为扩散开然后再收回来。
 
-As you may recall, this example worked by creating a new, short-lived `IObservable<int>` for each item produced by `src`. (These child sequences, represented by the `delta` range variable in the example, produce the value `1`, and then after the specified `minimumActivityPeriod`, they produce `-1`. This enabled us to keep count of the number of recent events emitted.) This is the _fanning out_ part, where items in a source sequence produce new observable sequences. `SelectMany` is crucial in these scenarios because it enables all of those new sequences to be flattened back out into a single output sequence.
+如你所记得，这个例子通过为 `src` 产生的每个项目创建一个新的、短暂的 `IObservable<int>` 工作。（这些子序列，由示例中的 `delta` 范围变量表示，产生值 `1`，然后在指定的 `minimumActivityPeriod` 后，它们产生 `-1`。这使我们能够跟踪最近发出的事件的数量。）这是扩散开的部分，其中源序列中的项目产生新的可观察序列。`SelectMany` 在这些场景中至关重要，因为它使所有这些新序列都可以平展回单个输出序列。
 
-The second place I used `SelectMany` was slightly different: it was the final example of the [**Representing Filesystem Events in Rx** section in chapter 3](03_CreatingObservableSequences.md#representing-filesystem-events-in-rx). Although that example also combined multiple observable sources into a single observable, that list of observables was fixed: there was one for each of the different events from `FileSystemWatcher`. It used a different operator `Merge` (which we'll get to in [Combining Sequences](09_CombiningSequences.md)), which was simpler to use in that scenario because you just pass it the list of all the observables you'd like to combine. However, because of a few other things this code wanted to do (including deferred startup, automated disposal, and sharing a single source when multiple subscribers were active), the particular combination of operators used to achieve this meant our merging code that returned an `IObservable<FileSystemEventArgs>`, needed to be invoked as a transforming step. If we'd just used `Select`, the result would have been an `IObservable<IObservable<FileSystemEventArgs>>`. The structure of the code meant that it would only ever produce a single `IObservable<FileSystemEventArgs>`, so the double-wrapped type would be rather inconvenient. `SelectMany` is very useful in these scenarios. If composition of operators has introduced an extra layer of observables-in-observables that you don't want, `SelectMany` can unwrap one layer for you.
+我第二次使用 `SelectMany` 有些不同：它是第 3 章[**在 Rx 中表示文件系统事件**部分的最后一个示例](03_CreatingObservableSequences.md#representing-filesystem-events-in-rx)。尽管该示例也将多个可观察源结合成单个可观察对象，但这个可观察列表是固定的：有一个来自 `FileSystemWatcher` 的不同事件。它使用了一个不同的操作符 `Merge`（我们将在[结合序列](09_CombiningSequences.md)中讨论），在那种场景中使用更简单，因为你只需传递你想结合的所有可观察对象的列表。然而，由于这段代码想要做的其他几件事（包括延迟启动、自动处理和在多个订阅者活跃时共享单一源），用于实现这一点的操作符组合意味着我们的合并代码返回一个 `IObservable<FileSystemEventArgs>`，需要作为转换步骤进行调用。如果我们只使用 `Select`，结果将是一个 `IObservable<IObservable<FileSystemEventArgs>>`。代码结构意味着它只会产生单一 `IObservable<FileSystemEventArgs>`，因此双包装类型非常不方便。`SelectMany` 在这些场景中非常有用。如果操作符的组合引入了你不想要的额外可观察层，`SelectMany` 可以为你解包一层。
 
-These two cases—fanning out then back in, and removing or avoiding a layer of observables of observables—come up quite often, which makes `SelectMany` an important method. (It's not surprising that I was unable to avoid using it in earlier examples.)
+这两种情况——扩散开然后再收回来，以及删除或避免一层可观察对象的可观察层——经常出现，这使得 `SelectMany` 成为一种重要的方法。（鉴于我无法在前面的示例中避免使用它，这并不奇怪。）
 
-As it happens, `SelectMany` is also a particularly important operator in the mathematical theory that Rx is based on. It is a fundamental operator, in the sense that it is possible to build many other Rx operators with it. [Section 'Recreating other operators with `SelectMany`' in Appendix D](D_AlgebraicUnderpinnings.md#recreating-other-operators-with-selectmany) shows how you can implement `Select` and `Where` using `SelectMany`.
+事实上，`SelectMany` 还是 Rx 基于的数学理论中一种特别重要的操作符。它是一个基本操作符，从某种意义上说，可以用它来构建许多其他 Rx 操作符。[附录 D 中的 'Recreating other operators with `SelectMany`' 部分](D_AlgebraicUnderpinnings.md#recreating-other-operators-with-selectmany) 展示了如何使用 `SelectMany` 实现 `Select` 和 `Where`。
 
 ## Cast
 
-C#'s type system is not omniscient. Sometimes we might know something about the type of the values emerging from an observable source that is not reflected in that source's type. This might be based on domain-specific knowledge. For example, with the AIS messages broadcast by ships, we might know that if the message type is 3, it will contain navigation information. That means we could write this:
+C# 的类型系统并不无所不知。有时我们可能知道有关从可观察源中出现的值的类型的一些信息，这些信息不反映在该源的类型中。这可能基于特定域的知识。例如，对于由船只广播的 AIS 消息，我们可能知道如果消息类型是 3，它将包含导航信息。这意味着我们可以编写如下代码：
 
 ```csharp
 IObservable<IVesselNavigation> type3 = 
@@ -267,29 +267,29 @@ IObservable<IVesselNavigation> type3 =
                         .Cast<IVesselNavigation>();
 ```
 
-This uses `Cast`, a standard LINQ operator that we can use whenever we know that the items in some collection are of some more specific type than the type system has been able to deduce.
+这使用了 `Cast`，这是一个标准 LINQ 操作符，我们可以在知道某个集合中的项目是某个特定类型而类型系统未能推断出来时使用它。
 
-The difference between `Cast` and the [`OfType` operator shown in chapter 5](05_Filtering.md#oftype) is the way in which they handle items that are not of the specified type. `OfType` is a filtering operator, so it just filters out any items that are not of the specified type. But with `Cast` (as with a normal C# cast expression) we are asserting that we expect the source items to be of the specified type, so the observable returned by `Cast` will invoke its subscriber's `OnError` if its source produces an item that is not compatible with the specified type.
+`Cast` 和 [第 5 章中显示的 `OfType` 操作符](05_Filtering.md#oftype) 的区别在于它们处理不是指定类型的项目的方式。`OfType` 是一个过滤操作符，因此它只是过滤掉不是指定类型的任何项目。但是使用 `Cast`（如同正常的 C# 类型转换表达式一样），我们断言我们期望源项目是指定类型的，因此如果其源产生的项目与指定类型不兼容，`Cast` 返回的可观察对象将调用其订阅者的 `OnError`。
 
-This distinction might be easier to see if we recreate the functionality of `Cast` and `OfType` using other more fundamental operators.
+如果我们使用其他更基本的操作符重建 `Cast` 和 `OfType` 的功能，这种区别可能更容易看到。
 
 ```csharp
-// source.Cast<int>(); is equivalent to
+// source.Cast<int>(); 等同于
 source.Select(i => (int)i);
 
 // source.OfType<int>();
 source.Where(i => i is int).Select(i => (int)i);
 ```
 
-## Materialize and Dematerialize
+## Materialize 和 Dematerialize
 
-The `Materialize` operator transforms a source of `IObservable<T>` into one of type `IObservable<Notification<T>>`. It will provide one `Notification<T>` for each item the source produces, and, if the sourced terminates, it will produce one final `Notification<T>` indicating whether it completed successfully or with an error.
+`Materialize` 操作符将类型为 `IObservable<T>` 的源转换为 `IObservable<Notification<T>>`。对于源产生的每个项目，它将提供一个 `Notification<T>`，如果源终止，它将产生一个最终的 `Notification<T>` 表示它是成功完成还是带错误结束。
 
-This can be useful because it produces objects that describe a whole sequence. If you wanted to record the output of an observable in a way that could later be replayed...well you'd probably use a `ReplaySubject<T>` because it is designed for precisely that job. But if you wanted to be able to do something other than merely replaying the sequence—inspecting the items or maybe even modifying them before replying, you might want to write your own code to store items. `Notification<T>` can be helpful because it enables you to represent everything a source does in a uniform way. You don't need to store information about whether or how the sequence terminates separately—this information is just the final `Notification<T>`.
+这很有用，因为它生成描述整个序列的对象。如果你想要记录一个可观察对象的输出，以便以后可以重放...好吧，你可能会使用 `ReplaySubject<T>`，因为它专为此任务设计。但是如果你想要做的不仅仅是重播序列——例如检查项目或在回复前修改它们——你可能想编写自己的代码来存储项目。`Notification<T>` 可以帮助，因为它使你能够以统一的方式表示源的所有操作。你不需要单独存储有关序列如何或如何结束的信息——此信息只是最后的 `Notification<T>`。
 
-You could imagine using this in conjunction with `ToArray` in a unit test. This would enable you to get an array of type `Notification<T>[]` containing a complete description of everything the source did, making it easy to write tests that ask, say, what the third item to emerge from the sequence was. (The Rx.NET source code itself uses `Notification<T>` in many of its tests.)
+你可以想象将这与单元测试中的 `ToArray` 结合使用。这将使你能够获取一个类型为 `Notification<T>[]` 的数组，包含源的完整描述，从而轻松编写询问序列中第三个项目是什么的测试。（Rx.NET 源代码本身在许多测试中使用了 `Notification<T>`。）
 
-If we materialize a sequence, we can see the wrapped values being returned.
+如果我们实现化一个序列，我们可以看到返回的封装值。
 
 ```csharp
 Observable.Range(1, 3)
@@ -297,7 +297,7 @@ Observable.Range(1, 3)
           .Dump("Materialize");
 ```
 
-Output:
+输出：
 
 ```
 Materialize --> OnNext(1)
@@ -307,13 +307,13 @@ Materialize --> OnCompleted()
 Materialize completed
 ```
 
-Note that when the source sequence completes, the materialized sequence produces an 'OnCompleted' notification value and then completes. `Notification<T>` is an abstract class with three implementations:
+注意当源序列完成时，物化的序列产生一个 'OnCompleted' 通知值然后完成。`Notification<T>` 是一个抽象类，有三个实现：
 
  * OnNextNotification
  * OnErrorNotification
  * OnCompletedNotification
 
-`Notification<T>` exposes four public properties to help you inspect it: `Kind`, `HasValue`, `Value` and `Exception`. Obviously only `OnNextNotification` will return true for `HasValue` and have a useful implementation of `Value`. Similarly, `OnErrorNotification` is the only implementation that will have a value for `Exception`. The `Kind` property returns an `enum` which allows you to know which methods are appropriate to use.
+`Notification<T>` 公开四个公共属性以帮助您检查它：`Kind`、`HasValue`、`Value` 和 `Exception`。显然，只有 `OnNextNotification` 将对 `HasValue` 返回 true 并有 `Value` 的有用实现。同样，`OnErrorNotification` 是唯一具有 `Exception` 值的实现。`Kind` 属性返回一个 `enum`，允许您知道哪些方法适合使用。
 
 ```csharp
 public enum NotificationKind
@@ -324,7 +324,7 @@ public enum NotificationKind
 }
 ```
 
-In this next example we produce a faulted sequence. Note that the final value of the materialized sequence is an `OnErrorNotification`. Also that the materialized sequence does not error, it completes successfully.
+在这个接下来的例子中，我们生成一个出错的序列。注意，物化序列的最终值是一个 `OnErrorNotification`。还要注意，物化的序列没有出错，它成功完成了。
 
 ```csharp
 var source = new Subject<int>();
@@ -338,7 +338,7 @@ source.OnNext(3);
 source.OnError(new Exception("Fail?"));
 ```
 
-Output:
+输出：
 
 ```
 Materialize --> OnNext(1)
@@ -348,6 +348,6 @@ Materialize --> OnError(System.Exception)
 Materialize completed
 ```
 
-Materializing a sequence can be very handy for performing analysis or logging of a sequence. You can unwrap a materialized sequence by applying the `Dematerialize` extension method. The `Dematerialize` will only work on `IObservable<Notification<TSource>>`.
+物化一个序列对于执行序列的分析或记录非常方便。你可以通过应用 `Dematerialize` 扩展方法来解包一个物化的序列。`Dematerialize` 只能用于 `IObservable<Notification<TSource>>`。
 
-This completes our tour of the transformation operators. Their common characteristic is that they produce an output (or, in the case of `SelectMany`, a set of outputs) for each input item. Next we will look at the operators that can combine information from multiple items in their source.
+这完成了我们对转换操作符的介绍。它们的共同特征是它们为每个输入项产生一个输出（或在 `SelectMany` 的情况下，一组输出）。接下来我们将看看可以从其源中的多个项目中结合信息的操作符。

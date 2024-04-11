@@ -1,21 +1,21 @@
-# Partitioning
+# 分区
 
-Rx can split a single sequence into multiple sequences. This can be useful for distributing items over many subscribers. When performing analytics, it can be useful to take aggregates on partitions. You may already be familiar with the standard LINQ operators `GroupBy`. Rx supports this, and also defines some of its own.
+Rx可以将单个序列拆分为多个序列。这对于将项目分配给多个订阅者非常有用。在进行分析时，对分区进行聚合可能是有用的。您可能已经熟悉标准LINQ运算符`GroupBy`。Rx支持这一点，并且还定义了一些自己的。
 
 ## GroupBy
 
-The `GroupBy` operator allows you to partition your sequence just as `IEnumerable<T>`'s `GroupBy` operator does. Once again, the open source [Ais.Net project](https://github.com/ais-dotnet) can provide a useful example. Its [`ReceiverHost` class](https://github.com/ais-dotnet/Ais.Net.Receiver/blob/15de7b2908c3bd67cf421545578cfca59b24ed2c/Solutions/Ais.Net.Receiver/Ais/Net/Receiver/Receiver/ReceiverHost.cs) makes AIS messages available through Rx, defining a `Messages` property of type `IObservable<IAisMessage>`. This is a very busy source, because it reports every message it is able to access. For example, if you connect the receiver to the AIS message source generously provided by the Norwegian government, it produces a notification every time _any_ ship broadcasts an AIS message anywhere on the Norwegian coast. There are a lot of ships moving around Norway, so this is a bit of a firehose.
+`GroupBy`运算符允许您像`IEnumerable<T>`的`GroupBy`运算符那样划分序列。再次打开开源[Ais.Net项目](https://github.com/ais-dotnet)可以提供一个有用的示例。它的[`ReceiverHost`类](https://github.com/ais-dotnet/Ais.Net.Receiver/blob/15de7b2908c3bd67cf421545578cfca59b24ed2c/Solutions/Ais.Net.Receiver/Ais/Net/Receiver/Receiver/ReceiverHost.cs)通过Rx提供AIS消息，定义了一个类型为`IObservable<IAisMessage>`的`Messages`属性。这是一个非常繁忙的源，因为它报告能够访问的每条消息。例如，如果您将接收器连接到挪威政府慷慨提供的AIS消息源，每次挪威海岸的任何船只广播AIS消息时，都会产生一个通知。挪威有很多船只在移动，所以这是一个信息量巨大的源。
 
-If we know exactly which ships we're interested in, you saw how to filter this stream in the [Filtering chapter](05_Filtering.md). But what if we don't, and yet we still want to be able to perform processing relating to individual ships? For example, perhaps we'd like to discover any time any ship changes its `NavigationStatus` (which reports values such as `AtAnchor`, or `Moored`). The [`Distinct` and `DistinctUntilChanged` section of the Filtering chapter](05_Filtering.md#distinct-and-distinctuntilchanged) showed how to do exactly that, but it began by filtering the stream down to messages from a single ship. If we tried to use `DistinctUntilChanged` directly on the all-ships stream it will not produce meaningful information. If ship A is moored and ship B is at anchor, and if we receive alternative status messages from ship A and ship B, `DistinctUntilChanged` would report each message as a change in status, even though neither ship's status has changed.
+如果我们确切知道我们感兴趣的船只，您已经在[过滤章节](05_Filtering.md)中看到了如何过滤此流。但如果我们不知道，但仍然希望能够执行与个别船只相关的处理呢？例如，我们可能想要发现任何船只何时更改其`NavigationStatus`（报告诸如`AtAnchor`或`Moored`之类的值）。[过滤章节的`Distinct`和`DistinctUntilChanged`部分](05_Filtering.md#distinct-and-distinctuntilchanged)展示了如何做到这一点，但它是从筛选单个船只的消息流开始的。如果我们尝试直接在全部船只流上使用`DistinctUntilChanged`，它将不会产生有意义的信息。如果船A停泊并且船B在锚位，如果我们从船A和船B接收到交替状态消息，`DistinctUntilChanged`将报告每条消息都是状态更改，尽管两艘船的状态都没有变化。
 
-We can fix this by splitting the "all the ships" sequence into lots of little sequences:
+我们可以通过将“所有船只”的序列拆分为许多小序列来解决这个问题：
 
 ```csharp
 IObservable<IGroupedObservable<uint, IAisMessage>> perShipObservables = 
    receiverHost.Messages.GroupBy(message => message.Mmsi);
 ```
 
-This `perShipObservables` is an observable sequence of observable sequences. More specifically, it's an observable sequence of grouped observable sequences, but as you can see from [the definition of `IGroupedObservable<TKey, T>`](https://github.com/dotnet/reactive/blob/95d9ea9d2786f6ec49a051c5cff47dc42591e54f/Rx.NET/Source/src/System.Reactive/Linq/IGroupedObservable.cs#L18), a grouped observable is just a specialized kind of observable:
+此`perShipObservables`是可观察序列的序列。更具体地说，它是分组的可观察序列的可观察序列，但正如您从[`IGroupedObservable<TKey, T>`的定义](https://github.com/dotnet/reactive/blob/95d9ea9d2786f6ec49a051c5cff47dc42591e54f/Rx.NET/Source/src/System.Reactive/Linq/IGroupedObservable.cs#L18)中看到的，分组的可观测物只是一种特殊类型的可观测物：
 
 ```csharp
 public interface IGroupedObservable<out TKey, out TElement> : IObservable<TElement>
@@ -24,15 +24,15 @@ public interface IGroupedObservable<out TKey, out TElement> : IObservable<TEleme
 }
 ```
 
-Each time `receiverHost.Message` reports an AIS message, the `GroupBy` operator will invoke the callback to find out which group this item belongs to. We refer to the value returned by the callback as the _key_, and `GroupBy` remembers each key it has already seen. If this is a new key, `GroupBy` creates a new `IGroupedObservable` whose `Key` property will be the value just returned by the callback. It emits this `IGroupedObservable` from the outer observable (the one we put in `perShipObservables`) and then immediately causes that new `IGroupedObservable` to emit the element (an `IAisMessage` in this example) that produced that key. But if the callback produces a key that `GroupBy` has seen before, it finds the `IGroupedObservable` that it already produced for that key, and causes that to emit the value.
+每次`receiverHost.Message`报告AIS消息时，`GroupBy`运算符将调用回调以找出此项目属于哪个组。我们将回调返回的值称为_键_，并且`GroupBy`会记住它已经看到的每个键。如果这是一个新键，`GroupBy`将创建一个新的`IGroupedObservable`，其`Key`属性将是回调刚刚返回的值。它从外部可观察对象（我们放在`perShipObservables`中的那个）发出此`IGroupedObservable`，然后立即使该新的`IGroupedObservable`发出产生该键的元素（在本例中为`IAisMessage`）。但是如果回调产生了`GroupBy`之前见过的键，它会找到已经为该键生成过的`IGroupedObservable`，并使其发出该值。
 
-So in this example, the effect is that any time the `receiverHost` reports a message from a ship with we've not previously heard from, `perShipObservables` will emit a new observable that reports messages just for that ship. We could use this to report each time we learn about a new ship:
+因此，在此示例中，效果是每当`receiverHost`报告来自我们之前未听说过的船只的消息时，`perShipObservables`将发出一个新的可观察对象，仅报告该船只的消息。我们可以使用此方法报告每次我们了解到新船只的时间：
 
 ```csharp
 perShipObservables.Subscribe(m => Console.WriteLine($"New ship! {m.Key}"));
 ```
 
-But that doesn't do anything we couldn't have achieved with `Distinct`. The power of `GroupBy` is that we get an observable sequence for each ship here, so we can go on to set up some per-ship processing:
+但这并不能做到我们无法通过`Distinct`实现的任何事情。`GroupBy`的力量在于我们在这里为每艘船获得一个可观察序列，因此我们可以继续设置一些每艘船的处理：
 
 ```csharp
 IObservable<IObservable<IAisMessageType1to3>> shipStatusChangeObservables =
@@ -42,11 +42,11 @@ IObservable<IObservable<IAisMessageType1to3>> shipStatusChangeObservables =
         .Skip(1));
 ```
 
-This uses [`Select`](06_Transformation.md#select) (introduced in the Transformation chapter) to apply processing to each group that comes out of `perShipObservables`. Remember, each such group represents a distinct ship, so the callback we've passed to `Select` here will be invoked exactly once for each ship. This means it's now fine for us to use `DistinctUntilChanged`. The input this example supplies to `DistinctUntilChanged` is a sequence representing the messages from just one ship, so this will tell us when that ship changes its status. This is now able to do what we want because each ship gets its own instance of `DistinctUntilChanged`. `DistinctUntilChanged` always forwards the first event it receives—it only drops items when they are the same as the preceding item, and there is no preceding item in this case. But that is unlikely to be the right behaviour here. Suppose that the first message we see from some vessel named `A` reports a status of `Moored`. It's possible that immediately before we started running, it was in some different state, and that the very first report we received happened to represent a change in status. But it's more likely that it has been moored for some time before we started. We can't tell for certain, but the majority of status reports don't represent a change, so `DistinctUntilChanged`'s behaviour of always forwarding the first event is likely to be wrong here. So we use `Skip(1)` to drop the first message from each ship.
+这使用[`Select`](06_Transformation.md#select)（在转换章节中介绍）对从`perShipObservables`出来的每个组应用处理。记住，每个这样的组代表一艘不同的船，所以我们传递给`Select`的回调将为每艘船精确调用一次。这意味着现在我们可以使用`DistinctUntilChanged`了。此示例提供给`DistinctUntilChanged`的输入是代表来自一艘船的消息的序列，因此这将告诉我们该船何时更改其状态。现在能够做我们想做的事情，因为每艘船都有自己的`DistinctUntilChanged`实例。`DistinctUntilChanged`总是转发它接收到的第一个事件-它只会在它们与前一个项目相同时丢弃项目，而在这种情况下没有前一个项目。但这在这里不太可能是正确的行为。假设我们看到的一些名为`A`的船只的第一条消息报告其状态为`Moored`。在我们启动之前，它可能处于某种不同状态，而我们收到的第一条报告恰好代表状态更改。但更有可能的是，在我们启动之前，它已经停靠了一段时间。我们不能确定，但大多数状态报告并不代表更改，因此`DistinctUntilChanged`始终转发第一个事件的行为可能是错误的。因此，我们使用`Skip(1)`来删除来自每艘船的第一条消息。
 
-At this point we have an observable sequence of observable sequences. The outer sequence produces a nested sequence for each distinct ship that it sees, and that nested sequence will report `NavigationStatus` changes for that particular ship.
+此时，我们有了一个可观察序列的可观察序列。外部序列为我们看到的每艘不同的船产生了一个嵌套序列，并且该嵌套序列将报告该特定船只的`NavigationStatus`更改。
 
-I'm going to make a small tweak:
+我要做一个小调整：
 
 ```csharp
 IObservable<IAisMessageType1to3> shipStatusChanges =
@@ -56,24 +56,24 @@ IObservable<IAisMessageType1to3> shipStatusChanges =
         .Skip(1));
 ```
 
-I've replaced `Select` with [`SelectMany`, also described in the Transformation chapter](06_Transformation.md#selectmany). As you may recall, `SelectMany` flattens nested observables back into a single flat sequence. You can see this reflected in the return type: now we've got just an `IObservable<IAisMessageType1to3>` instead of a sequence of sequences.
+我用[`SelectMany`](06_Transformation.md#selectmany)（也在转换章节中描述）替换了`Select`。如您所记得，`SelectMany`将嵌套的可观察对象展平为单一的平坦序列。您可以从返回类型中看到这一点：现在我们得到了一个`IObservable<IAisMessageType1to3>`，而不是序列的序列。
 
-Wait a second! Haven't I just undone the work that `GroupBy` did? I asked it to partition the events by vessel id, so why am I now recombining it back into a single, flat stream? Isn't that what I started with?
+等一下！我刚才是否撤销了`GroupBy`所做的工作？我要求它按船只ID划分事件，那么为什么我现在要将其重新组合成单一平坦的流？这不是我开始的吗？
 
-It's true that the stream type has the same shape as my original input: this will be a single observable sequence of AIS messages. (It's a little more specialized—the element type is `IAisMessageType1to3`, because that's where I can get `NavigationStatus` from, but these all still implement `IAisMessage`.) And all the different vessels will be mixed together in this one stream. But I've not actually negated the work that `GroupBy` did. This marble diagram illustrates what's going on:
+这是真的，流类型与我的原始输入具有相同的形状：这将是AIS消息的单一可观察序列。（它稍微专门一些——元素类型是`IAisMessageType1to3`，因为我可以从中获取`NavigationStatus`，但这些仍然实现了`IAisMessage`。）所有不同的船只都将在这一个流中混合在一起。但我实际上并没有否定`GroupBy`所做的工作。这个弹球图表示了发生了什么：
 
-![A marble diagram showing how an input observable named receiverHost.Messages is expanded into groups, processed, and then collapsed back into a single source. The input observable shows events from three different ships, 'A', 'B', and 'C'. Each event is labelled with the ship's reported status. All the messages from A report a status of Moored. B makes two AtAnchor status reports, followed by two UnderwayUsingEngine reports. C reports UnderwaySailing twice, then AtAnchor, and then UnderwaySailing again. The events from the three ships are intermingled—the order on the input line goes A, B, C, B, A, C, B, C, C, B, A. The next section is labelled as perShipObservables, and this shows the effect of grouping the events by vessel. The first line shows only the events from A, the second those from B, and the third those from C. The next section is labelled with the processing code from the preceding example, and shows three more observables, corresponding to the three groups in the preceding part of the diagram. But in this one, the source for A shows no events at all. The second line shows a single event for B, the first one where it reported UnderwayUsingEngine. And it shows two for C: the one where it reported AtAnchor, and then the one after that where it reported UnderwaySailing. The final line of the diagram is a single source, combining the events just described in the preceding section of the diagram.](GraphicsIntro/Ch08-Partitioning-Marbles-Status-Changes.svg)
+![一个表明输入可观察对象名为receiverHost.Messages如何扩展到组中，被处理后又被压缩回单一源的弹球图。输入可观察对象显示了来自三艘不同船只“A”、“B”和“C”的事件。每个事件都标有船只报告的状态。A的所有消息都报告状态为Moored。B首先进行了两次AtAnchor状态报告，然后是两次UnderwayUsingEngine报告。C两次报告UnderwaySailing，然后是AtAnchor，然后再次是UnderwaySailing。来自三艘船的事件是交织的：输入行上的顺序为A、B、C、B、A、C、B、C、C、B、A。下一部分标记为perShipObservables，这显示了按船只分组事件的效果。第一行只显示来自A的事件，第二行是B的，第三行是C的。下一节用前面示例中的处理代码标记，并显示了与前面图表部分中的三个组对应的三个更多可观察对象。但在这一个中，A的来源根本没有事件。第二行为B显示了一项事件，即它首次报告UnderwayUsingEngine的那一项。它为C显示了两项：它报告AtAnchor的那一项，然后是之后报告UnderwaySailing的那一项。图表的最后一行是单一来源，结合了前面部分图表中刚描述的事件。](GraphicsIntro/Ch08-Partitioning-Marbles-Status-Changes.svg)
 
-The `perShipObservables` section shows how `GroupBy` creates a separate observable for each distinct vessel. (This diagram shows three vessels, named `A`, `B`, and `C`. With the real source, there would be a lot more observables coming out of `GroupBy`, but the principle remains the same.) We do a bit of work on these group streams before flattening them. As already described, we use `DistinctUntilChanged` and `Skip(1)` to ensure we only produce an event when we know for certain that a vessel's status has changed. (Since we only ever saw `A` reporting a status of `Moored`, then as far as we know its status never changed, which is why its stream is completely empty.) Only then do we flatten it back into a single observable sequence.
+`perShipObservables`部分显示了`GroupBy`是如何为每艘不同的船只创建一个单独的可观察对象的。（这个图表显示了三艘船只，分别命名为“A”、“B”和“C”。对于真实的源头，`GroupBy`会产生更多的可观察对象输出，但原理保持不变。）我们在这些组流上进行了一些工作，然后将其压平。正如已描述的，我们使用`DistinctUntilChanged`和`Skip(1)`来确保我们只在确定某艘船的状态已经变化时产生事件。（由于我们只看到“A”报告的状态为`Moored`，那么就我们所知，它的状态从未改变，这就是为什么它的流完全为空。）只有那时我们才将其压平回单一的可观察序列。
 
-Marble diagrams need to be simple to fit on a page, so let's now take a quick look at some real output. This confirms that this is very different from the raw `receiverHost.Messages`. First, I need to attach a subscriber:
+弹球图需要简单才能适应页面，所以现在让我们快速查看一些真实输出。这证实了这与原始的`receiverHost.Messages`非常不同。首先，我需要附加一个订阅者：
 
 ```csharp
 shipStatusChanges.Subscribe(m => Console.WriteLine(
    $"Vessel {((IAisMessage)m).Mmsi} changed status to {m.NavigationStatus} at {DateTimeOffset.UtcNow}"));
 ```
 
-If I then let the receiver run for about ten minutes, I see this output:
+如果我让接收器运行大约十分钟，我会看到这个输出：
 
 ```
 Vessel 257076860 changed status to UnderwayUsingEngine at 23/06/2023 06:42:48 +00:00
@@ -97,23 +97,23 @@ Vessel 232026676 changed status to Moored at 23/06/2023 06:51:54 +00:00
 Vessel 259638000 changed status to UnderwayUsingEngine at 23/06/2023 06:52:34 +00:00
 ```
 
-The critical thing to understand here is that in the space of ten minutes, `receiverHost.Messages` produced _thousands_ of messages. (The rate varies by time of day, but it's typically over a thousand messages a minute. The code would have processed roughly ten thousand messages when I ran it to produce that output.) But as you can see, `shipStatusChanges` produced just 19 messages.
+关键是要理解，在十分钟内，`receiverHost.Messages`产生了_成千上万_条消息。（发生率会根据一天中的时间而变化，但通常每分钟超过一千条消息。当我运行它产生该输出时，代码大概处理了大约一万条消息。）但正如您所看到的，`shipStatusChanges`仅产生了19条消息。
 
-This shows how Rx can tame high volume event sources in ways that are much more powerful than mere aggregation. We've not just reduced the data down to some statistical measure that can only provide an overview. Statistical measures such as averages or variance are often very useful, but they aren't always able to provide us with the domain-specific insights we want. They wouldn't be able to tell us anything about any particular ship for example. But here, every message tells us something about a particular ship. We've been able to retain that level of detail, despite the fact that we are looking at every ship. We've been able to instruct Rx to tell us any time any ship changes its status.
+这表明Rx如何以比仅聚合更强大的方式驯服高容量事件源。我们不仅仅是将数据简化为只能提供概览的某些统计度量。统计度量，如平均值或方差通常非常有用，但它们并不总能为我们提供我们想要的领域特定洞察。例如，它们无法告诉我们关于任何特定船只的任何事情。但在这里，每条消息都告诉我们关于特定船只的某些事情。尽管我们正在查看所有船只，我们仍然能够保留那个层次的细节，我们已经能够指导Rx告诉我们任何船只何时更改其状态。
 
-It may seem like I'm making too big a deal of this, but it took so little effort to achieve this result that it can be easy to miss just how much work Rx is doing for us here. This code does all of the following:
+这可能看起来像我在这件事上大惊小怪，但实现这个结果所花的努力如此之少，很容易忽略Rx在这里为我们做了多少工作。这段代码完成了以下所有操作：
 
-- monitors every single ship operating in Norwegian waters
-- provides per-ship information
-- reports events at a rate that a human could reasonably cope with
+- 监控挪威水域中的每一艘船只
+- 提供每艘船的信息
+- 报告人类可以合理应对的速率的事件
 
-It can take thousands of messages and perform the necessary processing to find the handful that really matter to us.
+这可以从成千上万条消息中筛选出对我们真正重要的少数几条消息。
 
-This is an example of the "fanning out, and then back in again" technique I described in ['The Significance of SelectMany' in the Transformation chapter](06_Transformation.md#the-significance-of-selectmany). This code uses `GroupBy` to fan out from a single observable to multiple observables. The key to this step is to create nested observables that provide the right level of detail for the processing we want to do. In this example that level of detail was "one specific ship" but it wouldn't have to be. You could imagine wanting to group messages by region—perhaps we're interesting in comparing different ports, so we'd want to partition the source based on whichever port a vessel is closest to, or perhaps by its destination port. (AIS provides a way for vessels to broadcast their intended destination.) Having partitioned the data by whatever criteria we require, we then define the processing to be applied for each group. In this case, we just watched for changes to `NavigationStatus`. This step will typically be where the reduction in volume happens. For example, most vessels will only change their `NavigationStatus` a few times a day at most. Having then reduced the notification stream to just those events we really care about, we can combine it back into a single stream that provides the high-value notifications we want.
+这是我在[转换章节的"The Significance of SelectMany"](06_Transformation.md#the-significance-of-selectmany)中描述的“分散出去，然后再聚合”的技术的一个例子。该代码使用`GroupBy`从单一的可观察对象分散到多个可观察对象。此步骤的关键是创建提供我们想要进行处理的正确细节级别的嵌套可观察对象。在这个例子中，该细节级别是“一个特定的船只”，但它不必总是这样。你可以想象按区域分组消息——我们可能对比较不同港口感兴趣，所以我们希望根据船只最接近的港口或目的地港口来分区源。（AIS提供了一种方法，让船只广播其预定目的地。）在根据我们需要的标准分区数据后，我们再定义要对每个组应用的处理。在本例中，我们仅监视`NavigationStatus`的更改。此步骤通常是减少体积的地方。例如，大多数船只最多每天只会更改其`NavigationStatus`几次。在将通知流减少到我们真正关心的事件后，我们可以将其重新组合成一个提供我们想要的高价值通知的单一流。
 
-This power comes at a cost, of course. It didn't take much code to get Rx to do this work for us, but we're causing it to work reasonably hard: it needs to remember every ship it has seen so far, and to maintain an observable source for each one. If our data source has broad enough reach to receive messages from tens of thousands of vessel, Rx will need to maintain tens of thousands of observable sources, one for each vessel. The example shown has nothing resembling an inactivity timeout—a vessel broadcasting even a single message will be remembered for as long as the program runs. (A malicious actor fabricating AIS messages each with a different made up identifier would eventually cause this code to crash by running out of memory.) Depending on your data sources you might need to take steps to avoid unbounded growth of memory usage, so real examples can become more complex than this, but the basic approach is powerful.
+这种能力当然是有代价的。让Rx为我们完成这项工作并不需要太多代码，但我们让它做了相当多的工作：它需要记住到目前为止看到的每艘船，并为每艘船维护一个可观察源。如果我们的数据源足够广泛以接收来自数以万计的船只的消息，Rx将需要维护数以万计的可观察源，每艘船一个。所示示例没有任何类似活动超时的东西——即使是广播一条消息的船只也会被记住，只要程序运行。（恶意行为者伪造每个带有不同虚构标识符的AIS消息最终会导致此代码因内存耗尽而崩溃。）根据您的数据来源，您可能需要采取措施避免内存使用无限增长，因此真实的例子可能比这更复杂，但基本方法是非常强大的。
 
-Now that we've seen an example, let's look at `GroupBy` in a bit more detail. It comes in a few different flavours. We just used this overload:
+现在我们已经看到了一个例子，让我们更详细地看看`GroupBy`。它有几种不同的风味。我们只是使用了这个重载：
 
 ```csharp
 public static IObservable<IGroupedObservable<TKey, TSource>> GroupBy<TSource, TKey>(
@@ -121,7 +121,7 @@ public static IObservable<IGroupedObservable<TKey, TSource>> GroupBy<TSource, TK
     Func<TSource, TKey> keySelector)
 ```
 
-That overload uses whatever the default comparison behaviour is for your chosen key type. In our case we used `uint` (the type of the `Mmsi` property that uniquely identifies a vessel in an AIS message), which is just a number, so it's an intrinsically comparable type. In some cases you might want non-standard comparison. For example, if you use `string` as a key, you might want to be able to specify a locale-specific case-insensitive comparison. For these scenarios, there's an overload that takes a comparer:
+该重载使用您选择的键类型的默认比较行为。在我们的例子中，我们使用了`uint`（在AIS消息中唯一标识船只的`Mmsi`属性的类型），这只是一个数字，所以它本质上是一种可比较的类型。在某些情况下，您可能希望进行非标准比较。例如，如果您使用`string`作为键，您可能希望能够指定区域特定的不区分大小写的比较。对于这些情况，有一个接受比较器的重载：
 
 ```csharp
 public static IObservable<IGroupedObservable<TKey, TSource>> GroupBy<TSource, TKey>(
@@ -130,7 +130,7 @@ public static IObservable<IGroupedObservable<TKey, TSource>> GroupBy<TSource, TK
     IEqualityComparer<TKey> comparer)
 ```
 
-There are two more overloads that extend the preceding two with an `elementSelector` argument:
+还有两个重载扩展了前面两个，带有一个`elementSelector`参数：
 
 ```csharp
 public static IObservable<IGroupedObservable<TKey, TElement>> GroupBy<TSource, TKey, TElement>(
@@ -147,12 +147,12 @@ public static IObservable<IGroupedObservable<TKey, TElement>> GroupBy<TSource, T
 {...}
 ```
 
-This is functionally equivalent to using the `Select` operator after `GroupBy`.
+这在功能上等同于在`GroupBy`后使用`Select`运算符。
 
-By the way, when using `GroupBy` you might be tempted to `Subscribe` directly to the nested observables:
+顺便说一下，使用`GroupBy`时，您可能会很想直接`Subscribe`到嵌套的可观察对象：
 
 ```csharp
-// Don't do it this way. Use the earlier example.
+// 不要这样做。使用前面的例子。
 perShipObservables.Subscribe(shipMessages =>
   shipMessages
     .OfType<IAisMessageType1to3>()
@@ -162,9 +162,9 @@ perShipObservables.Subscribe(shipMessages =>
     $"Ship {((IAisMessage)m).Mmsi} changed status to {m.NavigationStatus} at {DateTimeOffset.UtcNow}")));
 ```
 
-This may seem to have the same effect: `perShipObservables` here is the sequence returned by `GroupBy`, so it will produce a observable stream for each distinct ship. This example subscribes to that, and then uses the same operators as before on each nested sequence, but instead of collecting the results out into a single output observable with `SelectMany`, this explicitly calls `Subscribe` for each nested stream.
+这似乎产生了相同的效果：`perShipObservables`在这里是`GroupBy`返回的序列，因此它将为每艘不同的船只产生一个可观察流。这个例子订阅了这一点，然后在每个嵌套序列上使用与之前相同的运算符，但与通过`SelectMany`收集结果输出到一个单一输出可观察对象的早期版本不同，这显式地为每个嵌套流调用`Subscribe`。
 
-This might seem like a more natural way to work if you're unfamiliar with Rx. But although this will seem to produce he same behaviour, it introduces a problem: Rx doesn't understand that these nested subscriptions are associated with the outer subscription. That won't necessarily cause a problem in this simple example, but it could if we start using additional operators. Consider this modification:
+如果您不熟悉Rx，这似乎是一种更自然的工作方式。但虽然这似乎会产生相同的行为，它引入了一个问题：Rx不理解这些嵌套订阅与外部订阅之间的关系。在这个简单的例子中，这不一定会导致问题，但如果我们开始使用其他运算符，就可能会出现问题。考虑这个修改：
 
 ```csharp
 IDisposable sub = perShipObservables.Subscribe(shipMessages =>
@@ -177,21 +177,21 @@ IDisposable sub = perShipObservables.Subscribe(shipMessages =>
     $"Ship {((IAisMessage)m).Mmsi} changed status to {m.NavigationStatus} at {DateTimeOffset.UtcNow}")));
 ```
 
-I've added a `Finally` operator for the nested sequence. This enables us to invoke a callback when a sequence comes to an end for any reason. But even if we unsubscribe from the outer sequence (by calling `sub.Dispose();`) this `Finally` will never do anything. That's because Rx has no way of knowing that these inner subscriptions are part of the outer one.
+我为嵌套序列添加了`Finally`操作符。这使我们可以在序列因任何原因结束时调用一个回调。但即使我们取消外部序列的订阅（通过调用`sub.Dispose();`），这个`Finally`也不会触发任何事情。这是因为Rx无法知道这些内部订阅是外部订阅的一部分。
 
-If we made the same modification to the earlier version, in which these nested sequences were collected into one output sequence by `SelectMany`, Rx understands that subscriptions to the inner sequence exist only because of the subscription to the sequence returned by `SelectMany`. (In fact, `SelectMany` is what subscribes to those inner sequences.) So if we unsubscribe from the output sequence in that example, it will correctly run any `Finally` callbacks on any inners sequences.
+如果我们对之前版本进行同样的修改，在这个版本中，这些嵌套序列被`SelectMany`汇集到一个输出序列中，Rx就会理解这些内部序列的订阅只是因为对由`SelectMany`返回的序列的订阅而存在的。（事实上，是`SelectMany`订阅了这些内部序列。）因此，如果我们取消订阅那个例子中的输出序列，它会正确地运行任何内部序列的`Finally`回调。
 
-More generally, if you have lots of sequences coming into existence as part of a single processing chain, it is usually better to get Rx to manage the process from end to end.
+更普遍地说，如果你有许多序列作为单个处理链的一部分而出现，通常最好让Rx从头到尾管理这个过程。
 
 ## Buffer
 
-The `Buffer` operator is useful if you need to deal with events in batches. This can be useful for performance, especially if you're storing data about events. Take the AIS example. If you wanted to log notifications to a persistent store, the cost of storing a single record is likely to be almost identical to the cost of storing several. Most storage devices operate with blocks of data often several kilobytes in size, so the amount of work required to store a single byte of data is often identical to the amount of work required to store several thousand bytes. The pattern of buffering up data until we have a reasonably large chunk of work crops up all the time in programming. The .NET runtime library's `Stream` class has built-in buffering for exactly this reason, so it's no surprise that it's built into Rx.
+如果你需要成批处理事件，`Buffer`操作符非常有用。这对性能特别有帮助，尤其是当你正在存储有关事件的数据时。以AIS示例为例。如果你想将通知记录到持久存储中，存储单个记录的成本几乎与存储几个相同。大多数存储设备以几千字节的数据块大小运作，因此存储单个数据字节所需的工作量通常与存储几千字节的数据相同。在编程中，将数据缓冲到我们拥有相当大的工作块时的模式一直很普遍。.NET运行时库的`Stream`类内置了缓冲，正是出于这个原因，Rx内置了它。
 
-Efficiency concerns are not the only reason you might want to process multiple events in one batch instead of individual ones. Suppose you wanted to generate a stream of continuously updated statistics about some source of data. By carving the source into chunks with `Buffer`, you can calculate, say, an average over the last 10 events.
+出于效率的考虑并非是你希望批量处理多个事件的唯一原因。假设你想要生成一些数据源的持续更新统计流。通过使用`Buffer`将源划分为块，你可以计算，比如说，最近10个事件的平均值。
 
-`Buffer` can partition the elements from a source stream, so it's a similar kind of operator to `GroupBy`, but there are a couple of significant differences. First, `Buffer` doesn't inspect the elements to determine how to partition them—it partitions purely based on the order in which elements emerge. Second, `Buffer` waits until it has completely filled a partition, and then presents all of the elements as an `IList<T>`. This can make certain tasks a lot easier because everything in the partition is available for immediate use—values aren't buried in a nested `IObservable<T>`. Third, `Buffer` offers some overloads that make it possible for a single element to turn up in more than one 'partition'. (In this case, `Buffer` is no longer strictly partitioning the data, but as you'll see, it's just a small variation on the other behaviours.)
+`Buffer`可以对源流中的元素进行分区，所以它是一种与`GroupBy`类似的操作符，但有几个重要区别。首先，`Buffer`不检查元素以确定如何划分它们——它仅基于元素出现的顺序来划分。其次，`Buffer`等待直到完全填满一个分区，然后将所有元素作为`IList<T>`呈现。这可以使某些任务变得更容易，因为分区中的所有内容都可用于立即使用——值不会嵌套在`IObservable<T>`中。第三，`Buffer`提供了一些重载，使得一个元素可以出现在不止一个“分区”中。（在这种情况下，`Buffer`不再严格分区数据，但正如您将看到的，这只是其他行为的一个小变体。）
 
-The simplest way to use `Buffer` is to gather up adjacent elements into chunks. (LINQ to Objects now has an equivalent operator that it calls [`Chunk`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.chunk). The reason Rx didn't use the same name is that Rx introduced this operator over 10 years before LINQ to Objects did. So the real question is why LINQ to Objects chose a different name. It might be because `Chunk` doesn't support all of the variations that Rx's `Buffer` does, but you'd need to ask the .NET runtime library team.) This overload of `Buffer` takes a single argument, indicating the chunk size you would like:
+使用`Buffer`的最简单方法是将相邻元素聚集到块中。（LINQ to Objects现在有一个等效操作符，它称为[`Chunk`](https://learn.microsoft.com/en-us/dotnet/api/system.linq.enumerable.chunk)。Rx没有使用相同的名称的原因是Rx在LINQ to Objects之前十多年就引入了这个操作符。所以真正的问题是为什么LINQ to Objects选择了一个不同的名字。可能是因为`Chunk`不支持Rx的`Buffer`所有变体，但你需要询问.NET运行时库团队。）这个重载的`Buffer`采用单个参数，指示你想要的块大小：
 
 ```csharp
 public static IObservable<IList<TSource>> Buffer<TSource>(
@@ -200,7 +200,7 @@ public static IObservable<IList<TSource>> Buffer<TSource>(
 {...}
 ```
 
-This example uses it to split navigation messages into chunks of 4, and then goes on to calculate the average speed across those 4 readings:
+这个例子使用它将导航消息分成4块，然后继续计算这4个读数的平均速度：
 
 ```csharp
 IObservable<IList<IVesselNavigation>> navigationChunks = 
@@ -213,7 +213,7 @@ IObservable<float> recentAverageSpeed =
     navigationChunks.Select(chunk => chunk.Average(n => n.SpeedOverGround.Value));
 ```
 
-If the source completes, and has not produced an exact multiple of the chunk size, the final chunk will be smaller. We can see this with the following more artificial example:
+如果源完成，并且没有产生刚好是块大小的倍数的最终块将更小。我们可以用以下更人为的示例来观察这一点：
 
 ```csharp
 Observable
@@ -223,7 +223,7 @@ Observable
     .Dump("chunks");
 ```
 
-As you can see from this output, the final chunk has just a single item, even though we asked for 2 at a time:
+正如您从这个输出中可以看到，最终块只有一个项目，即使我们一次要求2个：
 
 ```
 chunks-->1, 2
@@ -232,9 +232,9 @@ chunks-->5
 chunks completed
 ```
 
-`Buffer` had no choice here because the source completed, and if it hadn't produced that final under-sized chunk, we would never have seen the final item. But apart from this end-of-source case, this overload of `Buffer` waits until it has collected enough elements to fill a buffer of the specified size before passing it on. That means that `Buffer` introduces a delay. If source items are quite far apart (e.g., when a ship is not moving it might only report AIS navigation data every few minutes) this can lead to long delays.
+`Buffer`在此处别无选择，因为源已完成，如果它没有产生那个最终的未满块，我们将永远看不到最终项。但除了这种源结束的情况外，`Buffer`的这种重载在传递它之前会等待直到收集到足够的元素来填满指定大小的缓冲区。这意味着`Buffer`引入了延迟。如果源项目相隔很远（例如，当船只不移动时，它可能每隔几分钟只报告一次AIS导航数据），这可能导致很长时间的延迟。
 
-In some cases, we might want to handle multiple events in a batch when a source is busy without having to wait a long time when the source is operating more slowly. This would be useful in a user interface. If you want to provide fresh information, it might be better to accept an undersized chunk so that you can provide more timely information. For these scenarios, `Buffer` offers overloads that accept a `TimeSpan`:
+在某些情况下，我们可能希望在源繁忙时批量处理多个事件，而在源操作较慢时不需要等待很长时间。这在用户界面中会很有用。如果你想提供最新信息，接受一个未满的块可能会更好，以便你可以提供更及时的信息。对于这些场景，`Buffer`提供了接受`TimeSpan`的重载：
 
 ```csharp
 public static IObservable<IList<TSource>> Buffer<TSource>(
@@ -249,25 +249,25 @@ public static IObservable<IList<TSource>> Buffer<TSource>(
 {...}
 ```
 
-The first of these partitions the source based on nothing but timing. This will emit one chunk every second no matter the rate at which `source` produces value:
+这些重载中的第一个仅基于时间对源进行分区。这将每秒发出一个块，无论`source`的产生速率如何：
 
 ```csharp
 IObservable<IList<string>> output = source.Buffer(TimeSpan.FromSeconds(1));
 ```
 
-If `source` happened to emit no values during any particular chunk's lifetime, `output` will emit an empty list.
+如果`source`在任何特定块的生命周期内未发出任何值，`output`将发出空列表。
 
-The second overload, taking both a `timespan` and a `count`, essentially imposes two upper limits: you'll never have to wait longer than `timespan` between chunks, and you'll never receive a chunk with more than `count` elements. As with the `timespan`-only overload, this can deliver under-full and even empty chunks if the source doesn't produce elements fast enough to fill the buffer within the time specified.
+第二个重载，同时接受`timespan`和`count`，本质上设置了两个上限：您将不会超过`timespan`间隔等待块，且不会接收到超过`count`元素的块。与仅`timespan`重载一样，如果源没有在指定的时间内产生足够的元素来填满缓冲区，这可以传递未满甚至空的块。
 
-### Overlapping buffers
+### 重叠的缓冲区
 
-In the preceding section, I showed an example that collected chunks of 4 `IVesselNavigation` entries for a particular vessel, and calculated the average speed. This sort of averaging over multiple samples can be a useful way of smoothing out slight random variations in readings. So the goal in this case wasn't to process items in batches for efficiency, it was to enable a particular kind of calculation.
+在前面的部分中，我展示了一个示例，收集了特定船只的4个`IVesselNavigation`条目，并计算了平均速度。这种多个样本的平均值是一种有用的方式，可以平滑出读数中的轻微随机变化。因此，在这种情况下的目标不是出于效率进行批量处理，而是启用一种特定类型的计算。
 
-But there was a problem with the example: because it was averaging 4 readings, it produced an output only once every 4 input messages. And since vessels might report their speed only once every few minutes if they are not moving, we might be waiting a very long time.
+但这个示例有一个问题：因为它平均了4个读数，所以每4个输入消息只产生一次输出。由于船只可能在不移动时每隔几分钟才报告一次速度，我们可能需要等待很长时间。
 
-There's an overload of `Buffer` that enables us to do a little better: instead of averaging the first 4 readings, and then the 4 readings after that, and then the 4 after that, and so on, we might want to calculate the average of the last 4 readings _every time the vessel reports a new reading.
+有一个`Buffer`的重载可以让我们做得更好：不是平均前四个读数，然后是之后的四个读数，然后是之后的四个，以此类推，我们可能希望在船只报告新读数时计算最后四个读数的平均值。
 
-This is sometimes called a sliding window. We want to process readings 1, 2, 3, 4, then 2, 3, 4, 5, then 3, 4, 5, 6, and so on. There's an overload of buffer that can do this. This example shows the first statement from the earlier average speed example, but with one small modification:
+这有时被称为滑动窗口。我们希望处理读数1、2、3、4，然后是2、3、4、5，然后是3、4、5、6，依此类推。有一个`Buffer`的重载可以做到这一点。这个示例显示了之前平均速度示例中的第一条语句，但进行了一点小修改：
 
 ```csharp
 IObservable<IList<IVesselNavigation>> navigationChunks = receiverHost.Messages
@@ -277,17 +277,17 @@ IObservable<IList<IVesselNavigation>> navigationChunks = receiverHost.Messages
     .Buffer(4, 1);
 ```
 
-This calls an overload of `Buffer` that takes two `int` arguments. The first does the same thing as before: it indicates that we want 4 items in each chunk. But the second argument indicates how often to produce a buffer. This says we want a buffer for every `1` element (i.e., every single element) that the source produces. (The overload that accepts just a `count` is equivalent to passing the same value for both arguments to this overload.)
+这调用了一个接受两个`int`参数的`Buffer`重载。第一个参数与之前相同：它表示我们希望每个块中有4个项目。但第二个参数表示我们希望多久产生一次缓冲区。这表示我们希望每个元素（即，源产生的每个元素）产生一个缓冲区。（接受仅`count`的重载相当于向此重载传递相同值的两个参数。）
 
-So this will wait until the source has produce 4 suitable messages (i.e., messages that satisfy the `Where` and `OfType` operators here) and will then report those first four readings in the first `IList<VesselNavigation>` to emerge from `navigationChunks`. But the source only has to produce one more suitable message, and then this will emit another `IList<VesselNavigation>`, containing 3 of the same value as were in the first chunk, and then the new value. When the next suitable message emerges, this will emit another list with the 3rd, 4th, 5th, and 6th messages, and so on.
+因此，这将等到源产生了4个合适的消息（即，满足这里的`Where`和`OfType`操作的消息），然后在第一个从`navigationChunks`出现的`IList<VesselNavigation>`中报告这四个读数。但源只需要产生一个更合适的消息，然后这将发出另一个`IList<VesselNavigation>`，其中包含第一个块中相同的3个值，然后是新值。当下一个合适的消息出现时，这将发出另一个列表，其中包含第三个、第四个、第五个和第六个消息，依此类推。
 
-This marble diagram illustrates the behaviour for `Buffer(4, 1)`.
+这个弹球图说明了`Buffer(4, 1)`的行为。
 
-![A marble diagram showing two sequences. The first is labelled "Range(1,6)" and shows the numbers 1 to 6. The second is labelled ".Buffer(4,1)", and it shows three events. The colour coding and horizontal position indicate that these emerge at the same time as he final three events in the top diagram. The first event on this second sequence contains a list of numbers, "1,2,3,4", the second shows "2,3,4,5" and the third shows "3,4,5,6".](GraphicsIntro/Ch08-Partitioning-Marbles-Buffer-Marbles.svg)
+![弹球图显示了两个序列。第一个标记为"Range(1,6)"，显示数字1到6。第二个标记为".Buffer(4,1)"，显示了三个事件。颜色编码和水平位置表明这些在顶部图表的最后三个事件同时出现。第一个事件在这个第二个序列中包含一个数字列表"1,2,3,4"，第二个显示"2,3,4,5"，第三个显示"3,4,5,6"。](GraphicsIntro/Ch08-Partitioning-Marbles-Buffer-Marbles.svg)
 
-If we fed this into the same `recentAverageSpeed` expression as the earlier example, we'd still get no output until the 4th suitable message emerges from the source, but from then on, every single suitable message to emerge from the source will emit a new average value. These average values will still always report the average of the 4 most recently reported speeds, but we will now get these averages four times as often.
+如果我们将这个输入到之前示例中的相同`recentAverageSpeed`表达式中，我们仍然不会在第四个合适的消息从源出现时获得任何输出，但从那时起，源中的每个合适的消息都将发出一个新的平均值。这些平均值仍然始终报告最近报告的4个速度的平均值，但我们现在将比以前更频繁地获得这些平均值。
 
-We could also use this to improve the example earlier that reported when ships changed their `NavigationStatus`. The last example told you what state a vessel had just entered, but this raises an obvious question: what state was it in before? We can use `Buffer(2, 1)` so that each time we see a message indicating a change in status, we also have access to the preceding change in status:
+我们还可以使用这一点来改进之前报告船只更改其`NavigationStatus`的示例。上一个示例告诉您船舶刚进入的状态，但这引出了一个明显的问题：它之前的状态是什么？我们可以使用`Buffer(2, 1)`，这样每次我们看到指示状态变化的消息时，我们也可以访问前一次状态变化：
 
 ```csharp
 IObservable<IList<IAisMessageType1to3>> shipStatusChanges =
@@ -302,7 +302,7 @@ IDisposable sub = shipStatusChanges.Subscribe(m => Console.WriteLine(
     $" at {DateTimeOffset.UtcNow}"));
 ```
 
-As the output shows, we can now report the previous state as well as the state just entered:
+正如输出所示，我们现在可以报告先前的状态以及刚进入的状态：
 
 ```
 Ship 259664000 changed status from UnderwayUsingEngine to Moored at 30/06/2023
@@ -313,9 +313,9 @@ Ship 257798800 changed status from UnderwayUsingEngine to Moored at 30/06/2023
  13:38:39 +00:00
 ```
 
-This change enabled us to remove the `Skip`. The earlier example had that because we can't tell whether the first message we receive from any particular ship after startup represents a change. But since we're telling `Buffer` we want pairs of messages, it won't give us anything for any single ship until it has seen messages with two different statuses.
+这个更改使我们能够删除`Skip`。之前的例子有它，因为我们无法确定从任何特定船只在启动后收到的第一条消息是否代表一个变化。但由于我们告诉`Buffer`我们想要消息对，所以它在看到两个不同状态的消息之前不会给我们任何船只的信息。
 
-You can also ask for a sliding window defined by time instead of counts using this overload:
+您还可以使用此重载按时间而非计数定义滑动窗口：
 
 ```csharp
 public static IObservable<IList<TSource>> Buffer<TSource>(
@@ -325,28 +325,28 @@ public static IObservable<IList<TSource>> Buffer<TSource>(
 {...}
 ```
 
-The `timeSpan` determines the length of time covered by each window, and the `timeShift` determines the interval at which new windows are started.
+`timeSpan`确定每个窗口涵盖的时间长度，`timeShift`确定启动新窗口的时间间隔。
 
 ## Window
 
-The `Window` operator is very similar to the `Buffer`. It can split the input into chunks based either on element count or time, and it also offers support for overlapping windows. However, it has a different return type. Whereas using `Buffer` on an `IObservable<T>` will return an `IObservable<IList<T>>`, `Window` will return an `IObservable<IObservable<T>>`. This means that `Window` doesn't have to wait until it has filled a complete buffer before producing anything. You could say that `Window` more fully embraces the reactive paradigm than `Buffer`. Then again after some experience you might conclude that `Window` is harder to use than `Buffer` but is very rarely any more useful in practice.
+`Window`操作符与`Buffer`非常相似。它可以根据元素计数或时间将输入分割成块，并且还提供对重叠窗口的支持。然而，它有不同的返回类型。使用`Buffer`在`IObservable<T>`上会返回一个`IObservable<IList<T>>`，而`Window`会返回一个`IObservable<IObservable<T>>`。这意味着`Window`不必等到填满一个完整的缓冲区才能产生输出。你可以说`Window`比`Buffer`更充分地拥抱反应性范式。然而，经过一些经验，你可能会得出结论，`Window`比`Buffer`更难使用，但在实践中很少更有用。
 
-Because `Buffer` returns an `IObservable<IList<T>>`, it can't produce a chunk until it has all of the elements that will go into that chunk. `IList<T>` supports random access—you can ask it how many elements it has, and you can retrieve any element by numeric index, and we expect these operations to complete immediately. (It would be technically possible to write an implementation of `IList<T>` representing as yet unreceived data, and to make its `Count` and indexer properties block if you try to use them before that data is available, but this would be a strange thing to do. Developers expect lists to return information immediately, and the lists produced by Rx's `Buffer` meet that expectation.) So if you write, say, `Buffer(4)`, it can't produce anything until it has all 4 items that will constitute the first chunk.
+因为`Buffer`返回一个`IObservable<IList<T>>`，它在得到将要进入该块的所有元素之前无法产生一个块。`IList<T>`支持随机访问——你可以询问它有多少元素，并且可以通过数字索引检索任何元素，并且我们希望这些操作立即完成。（技术上可以编写一个表示尚未接收的数据的`IList<T>`的实现，并使其`Count`和索引器属性在数据可用前阻塞如果你尝试使用它们，但这将是一件奇怪的事情。开发者期望列表立即返回信息，Rx的`Buffer`生成的列表满足这一期望。）因此，如果你写的是`Buffer(4)`，它在获得构成第一块的所有4项之前不能产生任何东西。
 
-But because `Window` returns an observable that produces a nested observable to represent each chunk, it can emit that before necessarily having all of the elements. In fact, it emits a new window as soon as it knows it will need one. If you use `Window(4, 1)` for example, the observable it returns emits its first nested observable immediately. And then as soon as the source produces its first element, that nested observable will emit that element, and then the second nested observable will be produced. We passed `1` as the 2nd argument to `Window`, so we get a new window for every element the source produces. As soon as the first element has been emitted, the next item the source emits will appear in the second window (and also the first, since we've specified overlapping windows in this case), so the second window is effectively _open_ from immediately after the emergence of the first element. So the `IObservable<IObservable<T>>` that `Window` return produces a new `IObservable<T>` at that point.
+但因为`Window`返回一个产生一个嵌套可观察对象来表示每个块的可观察对象，它可以在不必拥有所有元素之前发出它。实际上，一旦它知道将需要一个窗口，它就会发出一个新窗口。例如，如果你使用`Window(4, 1)`，它返回的可观察对象立即发出其第一个嵌套可观察对象。然后一旦源产生其第一个元素，那个嵌套可观察对象将发出那个元素，然后第二个嵌套可观察对象将被产生。我们将`1`作为`Window`的第二个参数传递，因此我们对于源产生的每个元素都会得到一个新窗口。一旦发出了第一个元素，源发出的下一个项目将出现在第二个窗口中（并且在这种情况下也出现在第一个窗口中，因为我们指定了重叠窗口），所以第二个窗口实际上是在第一个元素出现后立即_开启_的。因此`Window`返回的`IObservable<IObservable<T>>`在那时产生了一个新的`IObservable<T>`。
 
-Nested observables produce their items as and when they become available. They complete once `Window` knows there will be no further items in that window (i.e., at exactly the same point `Buffer` would have produced the completed `IList<T>` for that window.)
+嵌套的可观察对象在它们可用时发出它们的项。一旦`Window`知道不会有更多的项在那个窗口中（即，与`Buffer`为那个窗口产生完成的`IList<T>`的时点相同），它们就完成了。
 
-`Window` can seem like it is better than `Buffer` because it lets you get your hands on the individual items in a chunk the instant they are available. However, if you were doing calculations that required access to every single item in the chunk, this doesn't necessarily help you. You're not going to be able to complete your processing until you've received every item in the chunk, so you're not going to produce a final result any earlier, and your code might be more complicated because it can no longer count on having an `IList<T>` conveniently making all of the items available at once. However, if you're calculating some sort of aggregation over the items in a chunk, `Window` might be more efficient because it enables you to process each item as it emerges and then discard it. If a chunk is very large, `Buffer` would have to hold onto every item until the chunk completes, which might use more memory. Moreover, in cases where you don't necessarily need to see every item in a chunk before you can do something useful with those items, `Window` might enable you to avoid introducing processing delays.
+`Window`可能看起来比`Buffer`更好，因为它让你可以在单个项在块中可用时立即得到它们。但是，如果你正在执行需要块中每个单独项的计算，这并不一定帮助你。你要等到收到块中的每个项才能完成你的处理，所以你不会更早产生最终结果，而且你的代码可能更复杂，因为它不能再依靠一个`IList<T>`方便地同时访问所有项。不过，如果你正在计算块中项的某种聚合，`Window`可能更有效，因为它使你能够在每个项出现时处理它，然后丢弃它。如果一个块很大，`Buffer`需要保留块完成之前的所有项，这可能会使用更多内存。此外，在你不必在可以对这些项做一些有用的事情之前看到块中的每个项的情况下，`Window`可能使你避免引入处理延迟。
 
-`Window` doesn't help us in the AIS `NavigationStatus` example, because the goal there was to report both the _before_ and _after_ status for each change. We can't do that until we know what the _after_ value is, so we would get no benefit from receiving the _before_ value earlier. We need the second value to do what we're trying to do, so we might as well use `Buffer` because it's easier. But if you wanted to keep track of the number of distinct vessels that have reported movement so far today, `Window` would be an appropriate mechanism: you could set it up to produce one window per day, and you would be able to start seeing information within each window without needing to wait until the end of the day.
+在AIS的`NavigationStatus`示例中，`Window`并没有帮助我们，因为那里的目标是报告每次变更的_之前_和_之后_状态。在我们知道_之后_值之前，我们不会从接收到_之前_值中获益，所以我们可能会使用`Buffer`，因为它更容易。但如果你想追踪到目前为止今天已报告移动的不同船只的数量，`Window`将是一种合适的机制：你可以设置它产生每天一个窗口，你将能够在每个窗口内开始看到信息，而无需等到一天结束。
 
-In addition to supporting simple count-based or duration-based splitting, there are more flexible ways to define the window boundaries, such as this overload:
+除了支持简单的基于计数或持续时间的分割之外，还有更灵活的方式来定义窗口边界，例如这个重载：
 
 ```csharp
-// Projects each element of an observable sequence into consecutive non-overlapping windows.
-// windowClosingSelector : A function invoked to define the boundaries of the produced 
-// windows. A new window is started when the previous one is closed.
+
+// 将一个可观察序列的每个元素投影到连续的不重叠的窗口中。
+// windowClosingSelector : 被调用以定义所产生窗口的边界。当一个窗口关闭时，就会启动一个新窗口。
 public static IObservable<IObservable<TSource>> Window<TSource, TWindowClosing>
 (
     this IObservable<TSource> source, 
@@ -354,9 +354,9 @@ public static IObservable<IObservable<TSource>> Window<TSource, TWindowClosing>
 )
 ```
 
-The first of these complex overloads allows us to control when windows close. The `windowClosingSelector` function is called each time a window is created, and each windows will close when the corresponding sequence from the `windowClosingSelector` produces a value. The value is disregarded so it doesn't matter what type the sequence values are; in fact you can just complete the sequence from `windowClosingSelector` to close the window instead.
+这些复杂的重载中的第一个允许我们控制窗口何时关闭。每次创建窗口时都会调用`windowClosingSelector`函数，每个窗口将在来自`windowClosingSelector`的相应序列产生值时关闭。该值被忽略，所以序列值的类型并不重要；实际上，你可以通过完成`windowClosingSelector`的序列来关闭窗口。
 
-In this example, we create a window with a closing selector. We return the same subject from that selector every time, then notify from the subject whenever a user presses enter from the console.
+在这个示例中，我们使用关闭选择器创建一个窗口。我们每次从该选择器返回相同的主题，然后从控制台在用户按Enter时从主题通知。
 
 ```csharp
 int windowIdx = 0;
@@ -383,7 +383,7 @@ while (input != "exit")
 }
 ```
 
-Output (when I hit enter after '1' and '5' are displayed):
+输出（当我在显示'1'和'5'后按下Enter）：
 
 ```
 --Starting new window
@@ -411,12 +411,12 @@ window2 Completed
 Completed
 ```
 
-The most complex overload of `Window` allows us to create potentially overlapping windows.
+最复杂的`Window`重载允许我们创建潜在重叠的窗口。
 
 ```csharp
-// Projects each element of an observable sequence into zero or more windows.
-// windowOpenings : Observable sequence whose elements denote the creation of new windows.
-// windowClosingSelector : A function invoked to define the closing of each produced window.
+// 将一个可观察序列的每个元素投影到零个或多个窗口中。
+// windowOpenings : 表明新窗口创建的可观察序列。
+// windowClosingSelector : 调用一个函数以定义每个产生的窗口的关闭。
 public static IObservable<IObservable<TSource>> Window
     <TSource, TWindowOpening, TWindowClosing>
 (
@@ -426,15 +426,15 @@ public static IObservable<IObservable<TSource>> Window
 )
 ```
 
-This overload takes three arguments
+这个重载接受三个参数：
 
-1. The source sequence
-2. A sequence that indicates when a new window should be opened
-3. A function that takes a window opening value, and returns a window closing sequence
+1. 源序列
+2. 表示何时应打开新窗口的序列
+3. 一个函数，接受一个窗口打开值，并返回一个窗口关闭序列
 
-This overload offers great flexibility in the way windows are opened and closed. Windows can be largely independent from each other; they can overlap, vary in size and even skip values from the source.
+这个重载在窗口的打开和关闭方式上提供了很大的灵活性。各个窗口可以相互独立；它们可以重叠，大小可以变化，甚至可以跳过源中的值。
 
-To ease our way into this more complex overload, let's first try to use it to recreate a simpler version of `Window` (the overload that takes a count). To do so, we need to open a window once on the initial subscription, and once each time the source has produced then specified count. The window needs to close each time that count is reached. To achieve this we only need the source sequence. We will be subscribing to it multiple times, but for some kinds of sources that might cause problems, so we do so via the [`Publish`](15_PublishingOperators.md#publish) operator, which enables multiple subscribers while making only one subscription to the underlying source.
+为了便于我们进入这个更复杂的重载，让我们首先尝试使用它来重新创建`Window`的一个简化版本（接受计数的重载）。为此，我们需要在初始订阅时打开一个窗口，每次源产生指定计数时再次打开一个窗口。窗口需要在达到该计数时关闭。为了实现这一点，我们只需要源序列。我们将多次订阅它，但对于某些类型的源，这可能会导致问题，因此我们通过[`Publish`](15_PublishingOperators.md#publish)操作符进行订阅，它允许多个订阅者同时只订阅底层源一次。
 
 ```csharp
 public static IObservable<IObservable<T>> MyWindow<T>(
@@ -451,7 +451,7 @@ public static IObservable<IObservable<T>> MyWindow<T>(
 }
 ```
 
-If we now want to extend this method to offer skip functionality, we need to have two different sequences: one for opening and one for closing. We open a window on subscription and again after the `skip` items have passed. We close those windows after '`count`' items have passed since the window opened.
+如果我们现在想要扩展此方法以提供跳过功能，我们需要两个不同的序列：一个用于打开窗口，一个用于关闭窗口。我们在订阅时打开一个窗口，之后再在`skip`项过后再次打开一个窗口。我们在窗口打开后过`count`项时关闭这些窗口。
 
 ```csharp
 public static IObservable<IObservable<T>> MyWindow<T>(
@@ -475,9 +475,9 @@ public static IObservable<IObservable<T>> MyWindow<T>(
 }
 ```
 
-We can see here that the `windowClose` sequence is re-subscribed to each time a window is opened, due to it being returned from a function. This allows us to reapply the skip (`Skip(count-1)`) for each window. Currently, we ignore the value that the `windowOpen` pushes to the `windowClose` selector, but if you require it for some logic, it is available to you.
+我们可以看到，每次打开窗口时都会重新订阅`windowClose`序列，因为它是从函数返回的。这使我们可以重新应用跳过（`Skip(count-1)`）对每个窗口。目前，我们忽略了`windowOpen`推送到`windowClose`选择器的值，但如果你需要它进行某些逻辑，它可以供你使用。
 
-As you can see, the `Window` operator can be quite powerful. We can even use `Window` to replicate other operators; for instance we can create our own implementation of `Buffer` that way. We can have the `SelectMany` operator take a single value (the window) to produce zero or more values of another type (in our case, a single `IList<T>`). To create the `IList<T>` without blocking, we can apply the `Aggregate` method and use a new `List<T>` as the seed.
+正如您所见，`Window`操作符可以非常强大。我们甚至可以使用`Window`来复制其他操作符；例如，我们可以通过让`SelectMany`操作符接受单个值（窗口）来产生零个或多个另一类型的值（在我们的情况下，为单个`IList<T>`）来创建我们自己的`Buffer`实现。为了在不阻塞的情况下创建`IList<T>`，我们可以应用`Aggregate`方法并使用一个新的`List<T>`作为种子。
 
 ```csharp
 public static IObservable<IList<T>> MyBuffer<T>(this IObservable<T> source, int count)
@@ -494,6 +494,6 @@ public static IObservable<IList<T>> MyBuffer<T>(this IObservable<T> source, int 
 }
 ```
 
-You might find it to be an interesting exercise to try implementing other time shifting methods, like `Sample` or `Throttle`, with `Window`.
+您可能会发现尝试使用`Window`实现其他时间转换方法，比如`Sample`或`Throttle`，是一个有趣的练习。
 
-We've seen a few useful ways to spread a single stream of items across multiple output sequences, using either data-driven grouping criteria, or time-based chunking with either `Buffer` or `Window`. In the next chapter, we'll look at operators that can combine together data from multiple streams.
+我们已经看到了一些有用的方法来将单个项目流分散到多个输出序列中，使用的是数据驱动的分组标准，或者是使用`Buffer`或`Window`进行时间基础的块处理。在下一章中，我们将探讨可以将多个流中的数据组合在一起的操作符。
