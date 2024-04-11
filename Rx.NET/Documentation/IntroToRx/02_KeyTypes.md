@@ -1,8 +1,8 @@
-# Key types
+# 关键类型
 
-Rx is a powerful framework that can greatly simplify code that responds to events. But to write good Reactive code you have to understand the basic concepts. The fundamental building block of Rx is an interface called `IObservable<T>`. Understanding this, and its counterpart `IObserver<T>`, is the key to success with Rx.
+Rx 是一个强大的框架，可以大大简化响应事件的代码。但是要编写良好的反应式代码，你必须理解基本概念。Rx 的基本构建块是一个名为 `IObservable<T>` 的接口。理解这一点及其对应的 `IObserver<T>` 是使用 Rx 成功的关键。
 
-The preceding chapter showed this LINQ query expression as the first example:
+前一章展示了这个 LINQ 查询表达式作为第一个示例：
 
 ```csharp
 var bigTrades =
@@ -10,33 +10,33 @@ var bigTrades =
     where trade.Volume > 1_000_000;
 ```
 
-Most .NET developers will be familiar with [LINQ](https://learn.microsoft.com/en-us/dotnet/csharp/linq/) in at least one of its many popular forms such as [LINQ to Objects](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/concepts/linq/linq-to-objects), or [Entity Framework Core queries](https://learn.microsoft.com/en-us/ef/core/querying/). Most LINQ implementations allow you to query _data at rest_. LINQ to Objects works on arrays or other collections, and LINQ queries in Entity Framework Core run against data in a database, but Rx is different: it offers the ability to define queries over live event streams—what you might call _data in motion_.
+大多数 .NET 开发者至少会熟悉 [LINQ](https://learn.microsoft.com/en-us/dotnet/csharp/linq/) 的多种流行形式，例如 [LINQ to Objects](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/concepts/linq/linq-to-objects) 或 [Entity Framework Core 查询](https://learn.microsoft.com/en-us/ef/core/querying/)。大多数 LINQ 实现允许你查询 _静态数据_。LINQ to Objects 作用于数组或其他集合，Entity Framework Core 中的 LINQ 查询针对数据库中的数据，但 Rx 不同：它提供了在实时事件流上定义查询的能力，这可以称为 _动态数据_。
 
-If you don't like the query expression syntax, you can write exactly equivalent code by invoking LINQ operators directly:
+如果你不喜欢查询表达式语法，你可以通过直接调用 LINQ 操作符来编写完全等效的代码：
 
 ```csharp
 var bigTrades = trades.Where(trade => trade.Volume > 1_000_000);
 ```
 
-Whichever style we use, this is the LINQ way of saying that we want `bigTrades` to have just those items in `trades` where the `Volume` property is greater than one million.
+无论我们使用哪种风格，这都是 LINQ 表示我们希望 `bigTrades` 只包含 `trades` 中 `Volume` 属性大于一百万的项的方式。
 
-We can't tell exactly what these examples do because we can't see the type of the `trades` or `bigTrades` variables. The meaning of this code is going to vary greatly depending on these types. If we were using LINQ to objects, these would both likely be `IEnumerable<Trade>`. That would mean that these variables both referred to objects representing collections whose contents we could enumerate with a `foreach` loop. This would represent _data at rest_, data that our code could inspect directly.
+我们无法确切知道这些示例的作用，因为我们看不到 `trades` 或 `bigTrades` 变量的类型。这些代码的含义将根据这些类型的不同而有很大差异。如果我们使用的是 LINQ to objects，这些都可能是 `IEnumerable<Trade>`。这将意味着这些变量都指代表示我们可以用 `foreach` 循环枚举内容的集合的对象。这将代表 _静态数据_，我们的代码可以直接检查这些数据。
 
-But let's make it clear what the code means by being explicit about the type:
+但让我们通过明确类型来清楚地说明代码的意义：
 
 ```csharp
 IObservable<Trade> bigTrades = trades.Where(trade => trade.Volume > 1_000_000);
 ```
 
-This removes the ambiguity. It is now clear that we're not dealing with data at rest. We're working with an `IObservable<Trade>`. But what exactly is that?
+这消除了歧义。现在很清楚我们不是在处理静态数据。我们正在处理一个 `IObservable<Trade>`。但究竟是什么呢？
 
 ## `IObservable<T>`
     
-The [`IObservable<T>` interface](https://learn.microsoft.com/en-us/dotnet/api/system.iobservable-1) represents Rx's fundamental abstraction: a sequence of values of some type `T`. In a very abstract sense, this means it represents the same thing as [`IEnumerable<T>`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerable-1). 
+[`IObservable<T>` 接口](https://learn.microsoft.com/en-us/dotnet/api/system.iobservable-1) 代表 Rx 的基本抽象：某种类型 `T` 的值序列。从非常抽象的意义上说，这意味着它代表与 [`IEnumerable<T>`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerable-1) 相同的事物。
 
-The difference is in how code consumes those values. Whereas `IEnumerable<T>` enables code to retrieve values (typically with a `foreach` loop), an `IObservable<T>` provides values when they become available. This distinction is sometimes characterised as _push_ vs _pull_. We can _pull_ values out of an `IEnumerable<T>` by executing a `foreach` loop, but an `IObservable<T>` will _push_ values into our code.
+区别在于代码如何消费这些值。`IEnumerable<T>` 使代码能够检索值（通常使用 `foreach` 循环），而 `IObservable<T>` 提供值可用时的值。这种区别有时被描述为 _推送_ 与 _拉取_。我们可以通过执行 `foreach` 循环来从 `IEnumerable<T>` 中 _拉取_ 值，但 `IObservable<T>` 将 _推送_ 值进入我们的代码。
 
-How can an `IObservable<T>` push its values into our code? If we want these values, our code must _subscribe_ to the `IObservable<T>`, which means providing it with some methods it can invoke. In fact, subscription is the only operation an `IObservable<T>` directly supports. Here's the entire definition of the interface:
+`IObservable<T>` 如何将其值推送到我们的代码中呢？如果我们想要这些值，我们的代码必须 _订阅_ `IObservable<T>`，这意味着提供一些它可以调用的方法。事实上，订阅是 `IObservable<T>` 直接支持的唯一操作。以下是接口的整个定义：
 
 ```csharp
 public interface IObservable<out T>
@@ -45,57 +45,57 @@ public interface IObservable<out T>
 }
 ```
 
-You can see [the source for `IObservable<T>` on GitHub](https://github.com/dotnet/runtime/blob/b4008aefaf8e3b262fbb764070ea1dd1abe7d97c/src/libraries/System.Private.CoreLib/src/System/IObservable.cs). Notice that it is part of the .NET runtime libraries, and not the `System.Reactive` NuGet package. `IObservable<T>` represents such a fundamentally important abstraction that it is baked into .NET. (So you might be wondering what the `System.Reactive` NuGet package is for. The .NET runtime libraries define only the `IObservable<T>` and `IObserver<T>` interfaces, and not the LINQ implementation. The `System.Reactive` NuGet package gives us LINQ support, and also deals with threading.)
+你可以在 GitHub 上查看 [`IObservable<T>` 的源代码](https://github.com/dotnet/runtime/blob/b4008aefaf8e3b262fbb764070ea1dd1abe7d97c/src/libraries/System.Private.CoreLib/src/System/IObservable.cs)。注意它是 .NET 运行时库的一部分，而不是 `System.Reactive` NuGet 包的一部分。`IObservable<T>` 代表如此基本的重要抽象，以至于它被内置于 .NET 中。（所以你可能想知道 `System.Reactive` NuGet 包是做什么的。.NET 运行时库只定义了 `IObservable<T>` 和 `IObserver<T>` 接口，而没有定义 LINQ 实现。`System.Reactive` NuGet 包为我们提供了 LINQ 支持，并且还处理了线程问题。）
 
-This interface's only method makes it clear what we can do with an `IObservable<T>`: if we want to receive the events it has to offer, we can _subscribe_ to it. (We can also unsubscribe: the `Subscribe` method returns an `IDisposable`, and if we call `Dispose` on that it cancels our subscription.) The `Subscribe` method requires us to pass in an implementation of `IObserver<T>`, which we will get to shortly.
+这个接口的唯一方法清楚地表明了我们可以通过 `IObservable<T>` 做些什么：如果我们想要接收它提供的事件，我们可以 _订阅_ 它。（我们也可以取消订阅：`Subscribe` 方法返回一个 `IDisposable`，如果我们调用它的 `Dispose`，它会取消我们的订阅。）`Subscribe` 方法要求我们传入 `IObserver<T>` 的实现，我们将很快介绍这一点。
 
-Observant readers will have noticed that an example in the preceding chapter looks like it shouldn't work. That code created an `IObservable<long>` that produced events once per second, and then it subscribed to it with this code:
+细心的读者可能已经注意到，前一章中的一个示例看起来似乎是行不通的。该代码创建了一个每秒产生事件的 `IObservable<long>`，然后用以下代码订阅它：
 
 ```csharp
 ticks.Subscribe(
     tick => Console.WriteLine($"Tick {tick}"));
 ```
 
-That's passing a delegate, and not the `IObserver<T>` that `IObservable<T>.Subscribe` requires. We'll get to `IObserver<T>` shortly, but all that's happening here is that this example is using an extension method from the `System.Reactive` NuGet package:
+这是传递一个委托，而不是 `IObservable<T>.Subscribe` 所需的 `IObserver<T>`。我们将很快讨论 `IObserver<T>`，但这里发生的情况是该示例使用了来自 `System.Reactive` NuGet 包的扩展方法：
 
 ```csharp
-// From the System.Reactive library's ObservableExtensions class
+// 来自 System.Reactive 库的 ObservableExtensions 类
 public static IDisposable Subscribe<T>(this IObservable<T> source, Action<T> onNext)
 ```
 
-This is a helper method that wraps a delegate in an implementation of `IObserver<T>` and then passes that to `IObservable<T>.Subscribe`. The effect is that we can write just a simple method (instead of a complete implementation of `IObserver<T>`) and the observable source will invoke our callback each time it wants to supply a value. It's more common to use this kind of helper than to implement Rx's interfaces ourselves.
+这是一个辅助方法，它将委托包装在 `IObserver<T>` 的实现中，然后将其传递给 `IObservable<T>.Subscribe`。其效果是我们可以只编写一个简单的方法（而不是完整的 `IObserver<T>` 实现），并且当可观察源希望提供值时，它将调用我们的回调。使用这种类型的辅助方法比我们自己实现 Rx 的接口更常见。
 
-### Hot and Cold Sources
+### 热源和冷源
 
-Since an `IObservable<T>` cannot supply us with values until we subscribe, the time at which we subscribe can be important. Imagine an `IObservable<Trade>` describing trades occurring in some market. If the information it supplies is live, it's not going to tell you about any trades that occurred before you subscribed. In Rx, sources of this kind are described as being _hot_.
+由于 `IObservable<T>` 在我们订阅之前不能向我们提供值，因此我们订阅的时间可能很重要。设想一个描述某些市场中发生的交易的 `IObservable<Trade>`。如果它提供的信息是实时的，它不会告诉你在你订阅之前发生的任何交易。在 Rx 中，这种类型的源被描述为 _热源_。
 
-Not all sources are _hot_. There's nothing stopping an `IObservable<T>` always supplying the exact same sequence of events to any subscriber no matter when the call to `Subscribe` occurs. (Imagine an `IObservable<Trade>` which, instead of reporting live information, generates notifications based on recorded historical trade data.) Sources where it doesn't matter at all when you subscribe are known as _cold_ sources.
+并非所有源都是 _热源_。没有什么能阻止一个 `IObservable<T>` 始终向任何订阅者提供完全相同的事件序列，无论何时调用 `Subscribe`。（想象一个 `IObservable<Trade>`，它不是报告实时信息，而是根据记录的历史交易数据生成通知。）无论何时你订阅，情况都无关紧要的源被称为 _冷源_。
 
-Here are some sources that might be represented as hot observables:
+以下是一些可能表示为热观察对象的源：
 
-* Measurements from a sensor
-* Price ticks from a trading exchange
-* An event source that distributes events immediately such as Azure Event Grid
-* mouse movements
-* timer events
-* broadcasts like ESB channels or UDP network packets
+* 传感器的测量值
+* 交易交换的价格变动
+* 即时分发事件的事件源，如 Azure Event Grid
+* 鼠标移动
+* 定时器事件
+* 像 ESB 通道或 UDP 网络数据包这样的广播
 
-And some examples of some sources that might make good cold observables:
+一些可能成为良好冷观察对象的源的示例：
 
-* the contents of a collection (such as is returned by the [`ToObservable` extension method for `IEnumerable<T>`](03_CreatingObservableSequences.md#from-ienumerablet))
-* a fixed range of values, such as [`Observable.Range`](03_CreatingObservableSequences.md#observablerange) produces
-* events generated based on an algorithm, such as [`Observable.Generate`](03_CreatingObservableSequences.md#observablegenerate) produces
-* a factory for an asynchronous operation, such as [`FromAsync`](03_CreatingObservableSequences.md#from-task) returns
-* events produced by running conventional code such as a loop; you can create such sources with [`Observable.Create`](03_CreatingObservableSequences.md#observablecreate)
-* a streaming event provides such as Azure Event Hub or Kafka (or any other streaming-style source which holds onto events from the past to be able to deliver events from a particular moment in the stream; so _not_ an event source in the Azure Event Grid style)
+* 集合的内容（例如由 `IEnumerable<T>` 返回的 [`ToObservable` 扩展方法](03_CreatingObservableSequences.md#from-ienumerablet)）
+* 固定范围的值，例如 [`Observable.Range`](03_CreatingObservableSequences.md#observablerange) 产生的
+* 基于算法生成的事件，例如 [`Observable.Generate`](03_CreatingObservableSequences.md#observablegenerate) 产生的
+* 异步操作的工厂，例如 [`FromAsync`](03_CreatingObservableSequences.md#from-task) 返回的
+* 通过运行常规代码（如循环）生成的事件；你可以使用 [`Observable.Create`](03_CreatingObservableSequences.md#observablecreate) 创建此类源
+* 一个流事件提供者，如 Azure Event Hub 或 Kafka（或任何其他保留过去的事件以便能够从流中的特定时刻交付事件的流式源；因此_不_是 Azure Event Grid 风格的事件源）
 
-Not all sources are strictly completely _hot_ or _cold_.  For example, you could imagine a slight variation on a live `IObservable<Trade>` where the source always reports the most recent trade to new subscribers. Subscribers can count on immediately receiving something, and will then be kept up to date as new information arrives. The fact that new subscribers will always receive (potentially quite old) information is a _cold_-like characteristic, but it's only that first event that is _cold_. It's still likely that a brand new subscriber will have missed lots of information that would have been available to earlier subscribers, making this source more _hot_ than _cold_.
+并不是所有的源都严格完全是 _热_ 或 _冷_。例如，你可以想象一个对实时 `IObservable<Trade>` 的轻微变化，其中源总是向新订阅者报告最近的交易。订阅者可以立即收到一些东西，并将随着新信息的到来而保持最新。这种情况下新订阅者始终会收到（可能相当旧的）信息是一个 _冷_ 的特征，但只有那第一个事件是 _冷_ 的。它仍然可能是一个全新的订阅者错过了很多早期订阅者可以获得的信息，使得这个源比 _冷_ 更 _热_。
 
-There's an interesting special case in which a source of events has been designed to enable applications to receive every single event in order, exactly once. Event streaming systems such as Kafka or Azure Event Hub have this characteristic—they retain events for a while, to ensure that consumers don't miss out even if they fall behind from time to time. The standard input (_stdin_) for a process also has this characteristic: if you run a command line tool and start typing input before it is ready to process it, the operating system will hold that input in a buffer, to ensure that nothing is lost. Windows does something similar for desktop applications: each application thread gets a message queue so that if you click or type when it's not able to respond, the input will eventually be processed. We might think of these sources as _cold_-then-_hot_. They're like _cold_ sources in that we won't miss anything just because it took us some time to start receiving events, but once we start retrieving the data, then we can't generally rewind back to the start. So once we're up and running they are more like _hot_ events.
+有一个有趣的特例是，一个事件源被设计为能够使应用程序以确切的顺序接收每一个事件一次。事件流系统，如 Kafka 或 Azure Event Hub 具有这种特性——它们会保留事件一段时间，以确保消费者即使偶尔落后也不会错过。进程的标准输入（_stdin_）也具有这种特性：如果你运行一个命令行工具并在它准备处理输入之前开始输入，操作系统会将该输入保留在缓冲区中，以确保不会丢失任何内容。Windows 对桌面应用程序也有类似的做法：每个应用程序线程都有一个消息队列，所以如果你在应用程序无法响应时点击或输入，输入最终将被处理。我们可能会认为这些源是 _冷_ - 然后 - _热_。它们像 _冷_ 源一样，因为我们不会错过任何东西，仅仅因为我们花了一些时间才开始接收事件，但一旦我们开始检索数据，我们通常无法回到开始。所以一旦我们启动并运行，它们更像是 _热_ 事件。
 
-This kind of _cold_-then-_hot_ source can present a problem if we want to attach multiple subscribers. If the source starts providing events as soon as subscription occurs, then that's fine for the very first subscriber: it will receive any events that were backed up waiting for us to start. But if we wanted to attach multiple subscribers, we've got a problem: that first subscriber might receive all the notifications that were sitting waiting in some buffer before we manage to attach the second subscriber. The second subscriber will miss out.
+这类 _冷_ - 然后 - _热_ 的源可能会在我们想要附加多个订阅者时出现问题。如果源在订阅发生后立即开始提供事件，那么对于第一个订阅者来说没问题：它会收到在等待我们开始时积累的任何事件。但是如果我们想要附加多个订阅者，我们就会遇到问题：第一个订阅者可能会收到一些挂起的缓冲区中等待的所有通知，而我们设法附加的第二个订阅者将错过。
 
-In these cases, we really want some way to rig up all our subscribers before kicking things off. We want subscription to be separate from the act of starting. By default, subscribing to a source implies that we want it to start, but Rx defines a specialised interface that can give us more control: [`IConnectableObservable<T>`](https://github.com/dotnet/reactive/blob/f4f727cf413c5ea7a704cdd4cd9b4a3371105fa8/Rx.NET/Source/src/System.Reactive/Subjects/IConnectableObservable.cs). This derives from `IObservable<T>`, and adds just a single method, `Connect`:
+在这些情况下，我们真正想要的是在开始之前设置好所有的订阅者。我们希望订阅与开始的行为是分开的。通常情况下，订阅一个源意味着我们希望它开始，但 Rx 定义了一个专门的接口可以给我们更多控制：[`IConnectableObservable<T>`](https://github.com/dotnet/reactive/blob/f4f727cf413c5ea7a704cdd4cd9b4a3371105fa8/Rx.NET/Source/src/System.Reactive/Subjects/IConnectableObservable.cs)。它派生自 `IObservable<T>`，只增加了一个方法，`Connect`：
 
 ```csharp
 public interface IConnectableObservable<out T> : IObservable<T>
@@ -104,17 +104,17 @@ public interface IConnectableObservable<out T> : IObservable<T>
 }
 ```
 
-This is useful in these scenarios where there will be some process that fetches or generates events and we need to make sure we're prepared before that starts.  Because an `IConnectableObservable<T>` won't start until you call `Connect`, it provides you with a way to attach however many subscribers you need before events begin to flow.
+在这些场景中，将有一些过程来获取或生成事件，并且我们需要确保在这一切开始之前我们已经准备好了。因为 `IConnectableObservable<T>` 在你调用 `Connect` 之前不会开始，所以它为你提供了一种方式，在事件开始流动之前附加任意多的订阅者。
 
-The 'temperature' of a source is not necessarily evident from its type. Even when the underlying source is an `IConnectableObservable<T>`, that can often be hidden behind layers of code. So whether a source is hot, cold, or something in between, most of the time we just see an `IObservable<T>`. Since `IObservable<T>` defines just one method, `Subscribe`, you might be wondering how we can do anything interesting with it. The power comes from the LINQ operators that the `System.Reactive` NuGet library supplies.
+源的“温度”并不一定从它的类型中显而易见。即使底层源是 `IConnectableObservable<T>`，这通常也可能隐藏在代码层之后。所以无论一个源是热的，冷的还是介于之间的某种状态，大多数时候我们只看到一个 `IObservable<T>`。由于 `IObservable<T>` 只定义了一个方法 `Subscribe`，你可能会想知道我们如何用它做一些有趣的事情。力量来自 `System.Reactive` NuGet 库提供的 LINQ 操作符。
 
-### LINQ Operators and Composition
+### LINQ 操作符和组合
 
-So far I've shown only a very simple LINQ example, using the `Where` operator to filter events down to ones that meet certain criteria. To give you a flavour of how we can build more advanced functionality through composition, I'm going to introduce an example scenario.
+到目前为止，我只展示了一个非常简单的 LINQ 示例，使用 `Where` 操作符过滤符合某些条件的事件。为了让您了解如何通过组合构建更先进的功能，我将介绍一个示例场景。
 
-Suppose you want to write a program that watches some folder on a filesystem, and performs automatic processing any time something in that folder changes. For example, web developers often want to trigger automatic rebuilds of their client side code when they save changes in the editor so they can quickly see the effect of their changes. Filesystem changes often come in bursts. Text editors might perform a few distinct operations when saving a file. (Some save modifications to a new file, then perform a couple of renames once this is complete, because this avoids data loss if a power failure or system crash happens to occur at the moment you save the file.) So you typically won't want to take action as soon as you detect file activity. It would be better to give it a moment to see if any more activity occurs, and take action only after everything has settled down.
+假设您想编写一个程序，监视文件系统上的某个文件夹，并在该文件夹中的任何内容发生变化时执行自动处理。例如，网站开发人员通常希望在编辑器中保存更改时触发客户端代码的自动重建，以便他们可以迅速看到更改的效果。文件系统更改通常成批出现。文本编辑器在保存文件时可能执行几个不同的操作。（有些在保存修改时保存到新文件，然后在这个过程完成后执行几次重命名，因为这样可以避免在保存文件的那一刻发生电源故障或系统崩溃时数据丢失。）所以你通常不会希望在检测到文件活动后立即采取行动。最好是等一会儿看看是否还有更多的活动发生，只有在一切都平息后才采取行动。
 
-So we should not react directly to filesystem activity. We want take action at those moments when everything goes quiet after a flurry of activity. Rx does not offer this functionality directly, but it's possible for us to create a custom operator by combing some of the built-in operators. The following code defines an Rx operator that detects and reports such things. If you're new to Rx (which seems likely if you're reading this) it probably won't be instantly obvious how this works. This is a significant step up in complexity from the examples I've shown so far because this came from a real application. But I'll walk through it step by step, so all will become clear.
+所以我们不应该直接对文件系统活动作出反应。我们希望在一阵活动后的某个时刻采取行动。Rx 并没有直接提供这项功能，但我们可以通过结合一些内置的操作符来创建一个自定义操作符。以下代码定义了一个检测并报告此类情况的 Rx 操作符。如果你是 Rx 的新手（如果你在阅读这本书，这似乎很有可能），它的工作方式可能一下子不太明显。这比我迄今为止展示的示例复杂得多，因为这是来自一个真实应用程序的示例。但我将一步一步地向你解释，所以一切都会变得清晰。
 
 ```csharp
 static class RxExt
@@ -138,35 +138,35 @@ static class RxExt
 }
 ```
 
-The first thing to say about this is that we are effectively defining a custom LINQ-style operator: this is an extension method which, like all of the LINQ operators Rx supplies, takes an `IObservable<T>` as its implicit argument, and produces another observable source as its result. The return type is slightly different: it's `IObservable<IList<T>>`. That's because once we return to a state of inactivity, we will want to process everything that just happened, so this operator will produce a list containing every value that the source reported in its most recent flurry of activity.
+关于这方面要说的第一件事是我们实际上是在定义一个自定义的 LINQ 风格操作符：这是一个扩展方法，就像 Rx 提供的所有 LINQ 操作符一样，它接受一个 `IObservable<T>` 作为其隐式参数，并产生另一个可观察源作为其结果。返回类型略有不同：它是 `IObservable<IList<T>>`。这是因为一旦我们回到不活跃状态，我们将希望处理刚刚发生的所有事情，所以这个操作符将产生一个包含源在最近一次活动中报告的所有值的列表。
 
-When we want to show how an Rx operator behaves, we typically draw a 'marble' diagram. This is a diagram showing one or more `IObservable<T>` event sources, with each one being illustrated by a horizontal line. Each event that a source produces is illustrated by a circle (or 'marble') on that line, with the horizontal position representing timing. Typically, the line has a vertical bar on its left indicating the instant at which the application subscribed to the source, unless it happens to produce events immediately, in which case it will start with a marble. If the line has an arrowhead on the right, that indicates that the observable's lifetime extends beyond the diagram. Here's a diagram showing how the `Quiescent` operator above response to a particular input:
+当我们想展示一个 Rx 操作符的行为时，我们通常会绘制一个“弹珠”图。这是一个图表，显示一个或多个 `IObservable<T>` 事件源，每个源都由一条水平线表示。源产生的每个事件都用一圈（或“弹珠”）在该行上表示，水平位置表示时间。通常，该行的左侧有一个垂直条，表示应用程序订阅源的瞬间，除非它立即产生事件，否则将从一个弹珠开始。如果该行的右侧有一个箭头，这表明可观察对象的生命周期超出了图表。这里有一个图表，显示了上面的 `Quiescent` 操作符对某个输入的响应：
 
-![An Rx marble diagram illustrating two observables. The first is labelled 'source', and it shows six events, labelled numerically. These fall into three groups: events 1 and 2 occur close together, and are followed by a gap. Then events 3, 4, and 5 are close together. And then after another gap event 6 occurs, not close to any. The second observable is labelled 'source.Quiescent(TimeSpan.FromSeconds(2), Scheduler.Default)'. It shows three events. The first is labelled '1, 2', and its horizontal position shows that it occurs a little bit after the '2' event on the 'source' observable. The second event on the second observable is labelled '3,4,5' and occurs a bit after the '5' event on the 'source' observable. The third event from on the second observable is labelled '6', and occurs a bit after the '6' event on the 'source' observable. The image conveys the idea that each time the source produces some events and then stops, the second observable will produce an event shortly after the source stops, which will contain a list with all of the events from the source's most recent burst of activity.](GraphicsIntro/Ch02-Quiescent-Marbles-Input-And-Output.svg)
+![一个 Rx 弹珠图，说明了两个可观察对象。第一个标记为“source”，显示了六个事件，用数字标记。这些事件分为三组：事件 1 和 2 紧挨在一起，然后是一个间隙。然后事件 3、4 和 5 紧挨在一起。然后在另一个间隙后，事件 6 发生，与任何事件都不接近。第二个可观测对象标记为“source.Quiescent(TimeSpan.FromSeconds(2), Scheduler.Default)”。它显示了三个事件。第一个标记为“1, 2”，其水平位置显示它发生在“source”可观测对象上的“2”事件之后一点。第二个可观测对象的第二个事件标记为“3,4,5”，发生在“source”可观测对象上的“5”事件之后一点。第二个可观测对象上的第三个事件来自标记为“6”，发生在“source”可观测对象上的“6”事件之后一点。图像传达了这样的想法：每次源产生一些事件然后停止时，第二个可观测对象将在源停止后不久产生一个事件，其中包含一个列表，列表中包含源在最近一次活动中的所有事件。](GraphicsIntro/Ch02-Quiescent-Marbles-Input-And-Output.svg)
 
-This shows that the source (the top line) produced a couple of events (the values `1` and `2`, in this example), and then stopped for a bit. A little while after it stopped, the observable returned by the `Quiescent` operator (the lower line) produced a single event with a list containing both of those events (`[1,2]`). Then the source started up again, producing the values `3`, `4`, and `5` in fairly quick succession, and then going quiet for a bit. Again, once the quiet spell had gone on for long enough, the source returned by `Quiescent` produced a single event containing all of the source events from this second burst of activity (`[3,4,5]`). And then the final bit of source activity shown in this diagram consists of a single event, `6`, followed by more inactivity, and again, once the inactivity has gone on for long enough the `Quiescent` source produces a single event to report this. And since that last 'burst' of activity from the source contained only a single event, the list reported by this final output from the `Quiescent` observable is a list with a single value: `[6]`.
+这表明源（上面的线）产生了一对事件（在这个例子中是值 `1` 和 `2`），然后停了一会儿。它停止后不久，`Quiescent` 操作符返回的可观测对象（下面的线）产生了一个单一事件，包含这两个事件的列表（`[1,2]`）。然后，源再次启动，相当快地产生了值 `3`、`4` 和 `5`，然后静止了一会儿。再次，一旦静止时间足够长，由 `Quiescent` 返回的源产生了一个包含这第二批源事件的单一事件（`[3,4,5]`）。然后，这个图中源的最后一部分活动包括一个单一事件 `6`，之后是更多的不活动，再次，一旦不活动持续了足够长的时间，`Quiescent` 源产生了一个单一事件来报告这一点。由于源的最后一次“活动”只包含一个事件，所以这个 `Quiescent` 可观测对象的最后输出是一个只包含单一值 `[6]` 的列表。
 
-So how does the code shown achieve this? The first thing to notice about the `Quiescent` method is that it's just using other Rx LINQ operators (the `Return`, `Scan`, `Where`, and `Buffer` operators are explicitly visible, and the query expression will be using the `SelectMany` operator, because that's what C# query expressions do when they contain two `from` clauses in a row) in a combination that produces the final `IObservable<IList<T>>` output.
+那么，如何实现这个代码呢？首先要注意的是 `Quiescent` 方法只是使用了其他 Rx LINQ 操作符（`Return`、`Scan`、`Where` 和 `Buffer` 操作符是显而易见的，查询表达式将使用 `SelectMany` 操作符，因为这是 C# 查询表达式在包含两个 `from` 子句时所做的）的组合，产生了最终的 `IObservable<IList<T>>` 输出。
 
-This is Rx's _compositional_ approach, and it is how we normally use Rx. We use a mixture of operators, combined (_composed_) in a way that produces the effect we want.
+这是 Rx 的 _组合_ 方法，这是我们通常使用 Rx 的方式。我们使用一系列的操作符，通过组合（_组合_）以一种产生我们想要的效果的方式。
 
-But how does this particular combination produce the effect we want? There are a few ways we could get the behaviour that we're looking for from a `Quiescent` operator, but the basic idea of this particular implementation is that it keeps count of how many events have happened recently, and then produces a result every time that number drops back to zero. The `outstanding` variable refers to the `IObservable<int>` that tracks the number of recent events, and this marble diagram shows what it produces in response to the same `source` events as were shown on the preceding diagram:
+但这种特定的组合是如何产生我们想要的效果的呢？这里有几种方法可以从 `Quiescent` 操作符中得到我们正在寻找的行为，但这种特定实现的基本思想是它保持了最近发生的事件的计数，然后在这个数字回落到零时产生一个结果。`outstanding` 变量引用了跟踪最近事件数量的 `IObservable<int>`，这个弹珠图显示了它对同样的 `source` 事件的响应：
 
-![How the Quiescent operator counts the number of outstanding events. An Rx marble diagram illustrating two observables. The first is labelled 'source', and it shows the same six events as the preceding figure, labelled numerically, but this time also color-coded so that each event has a different color. As before, these events fall into three groups: events 1 and 2 occur close together, and are followed by a gap. Then events 3, 4, and 5 are close together. And then after another gap event 6 occurs, not close to any. The second observable is labelled 'outstanding' and for each of the events on the 'source' observable, it shows two events. Each such pair has the same color as on the 'source' line; the coloring is just to make it easier to see how events on this line are associated with events on the 'source' line. The first of each pair appears directly below its corresponding event on the 'source' line, and has a number that is always one higher than its immediate predecessor; the very first item shows a number of 1. The first item from the second pair is the next to appear on this line, and therefore has a number of 2. But then the second item from the first pair appears, and this lowers the number back to 1, and it's followed by the second item from the second pair, which shows 0. Since the second batch of events on the first line appear fairly close together, we see values of 1, 2, 1, 2, 1, and then 0 for these. The final event on the first line, labelled 6, has a corresponding pair on the second line reporting values of 1 and then 0. The overall effect is that each value on the second, 'outstanding' line tells us how many items have emerged from the 'source' line in the last 2 seconds.](GraphicsIntro/Ch02-Quiescent-Marbles-Outstanding.svg)
+![如何使用 Quiescent 操作符计算未决事件的数量。一个 Rx 弹珠图，展示了两个可观察对象。第一个标记为“source”，展示了与前一个图表中相同的六个事件，按数字标记，但这次也进行了颜色编码，以便每个事件都有不同的颜色。与以前一样，这些事件分为三组：事件 1 和 2 紧挨在一起，然后是一个间隙。然后事件 3、4 和 5 紧挨在一起。然后在另一个间隙后，事件 6 发生，与任何事件都不接近。第二个可观测对象标记为“outstanding”，对于“source”可观测对象上的每个事件，它显示了两个事件。每对的第一个事件出现在其在“source”线上对应事件的正下方，并且有一个数字，总是比它的直接前任高 1；最先出现的项显示数字 1。来自第二对的第一个项是接下来出现在这条线上的，因此有一个数字 2。但然后第一对的第二个项出现，这将数字降低回 1，它后面是第二对的第二个项，显示 0。由于第一行上第二批事件比较接近，我们看到的值是 1、2、1、2、1，然后是 0。第一行上的最后一个事件，标记为 6，在第二行上有一对相应的事件，报告值为 1 和 0。这整体效果是，第二个，“outstanding”线上的每个值告诉我们过去 2 秒内“source”线产生了多少个项目。](GraphicsIntro/Ch02-Quiescent-Marbles-Outstanding.svg)
 
-I've colour coded the events this time so that I can show the relationship between `source` events and corresponding events produced by `outstanding`. Each time `source` produces an event, `outstanding` produces an event at the same time, in which the value is one higher than the preceding value produced by `outstanding`. But each such `source` event also causes `outstanding` to produce another event two seconds later. (It's two seconds because in these examples, I've presumed that the first argument to `Quiescent` is `TimeSpan.FromSeconds(2)`, as shown on the first marble diagram.) That second event always produces a value that is one lower than whatever the preceding value was.
+这次我用颜色对事件进行了编码，这样我就可以显示 `source` 事件与 `outstanding` 产生的对应事件之间的关系。每次 `source` 产生一个事件时，`outstanding` 会同时产生一个事件，其值比前一个由 `outstanding` 产生的值高 1。但每个这样的 `source` 事件还会导致 `outstanding` 在两秒后产生另一个事件。（之所以是两秒，是因为这些示例中，我假设 `Quiescent` 的第一个参数是 `TimeSpan.FromSeconds(2)`，如第一个弹珠图所示。）这第二个事件总是产生一个比前一个值低 1 的值。
 
-This means that each event to emerge from `outstanding` tells us how many events `source` produced within the last two seconds. This diagram shows that same information in a slightly different form: it shows the most recent value produced by `outstanding` as a graph. You can see the value goes up by one each time `source` produces a new value. And two seconds after each value produced by `source`, it drops back down by one.
+这意味着，从 `outstanding` 中涌现的每个事件都告诉我们在过去两秒内 `source` 产生了多少个事件。这个图表以稍微不同的方式显示了同样的信息：它显示了 `outstanding` 产生的最新值的图表。你可以看到，每次 `source` 产生一个新值时，该值就会上升。每次 `source` 产生的值两秒后，它又会下降。
 
-![The number of outstanding events as a graph. An Rx marble diagram illustrating the 'source' observables, and the second observable from the preceding diagram this time illustrated as a bar graph showing the latest value. This makes it easier to see that the 'outstanding' value goes up each time a new value emerges from 'source', and then goes down again two seconds later, and that when values emerge close together this running total goes higher. It also makes it clear that the value drops to zero between the 'bursts' of activity.](GraphicsIntro/Ch02-Quiescent-Marbles-Outstanding-Value.svg)
+![未决事件数量的图表。一个 Rx 弹珠图，展示了“source”可观测对象，和前一个图表中的第二个可观测对象，这次展示为一个条形图表，显示最新的值。这让我们更容易看到“outstanding”值在“source”产生新值时上升，然后两秒后再次下降，当值紧挨在一起时这个累积总数会更高。它还清楚地表明，值在活动的“阵发”之间下降到零。](GraphicsIntro/Ch02-Quiescent-Marbles-Outstanding-Value.svg)
 
-In simple cases like the final event `6`, in which it's the only event that happens at around that time, the `outstanding` value goes up by one when the event happens, and drops down again two seconds later. Over on the left of the picture it's a little more complex: we get two events in fairly quick succession, so the `outstanding` value goes up to one and then up to two, before falling back down to one and then down to zero again. The middle section looks a little more messy—the count goes up by one when the `source` produces event `3`, and then up to two when event `4` comes in. It then drops down to one again once two seconds have passed since the `3` event, but then another event, `5`, comes in taking the total back up to two. Shortly after that it drops back to one again because it has now been two seconds since the `4` event happened. And then a bit later, two seconds after the `5` event it drops back to zero again.
+简单的情况，如最后一个事件 `6`，在大约那个时间它是唯一发生的事件，`outstanding` 的值在事件发生时上升了 1，然后两秒后再次下降。图片的左侧稍微复杂一些：我们看到两个相对快速的事件，所以 `outstanding` 的值先上升到 1，然后再上升到 2，再降回 1，然后再降到 0。中间部分看起来有点混乱——当 `source` 产生事件 `3` 时，计数上升 1，然后当事件 `4` 进来时上升到 2。在 `3` 事件发生后两秒，它又回落到 1，但另一个事件 `5` 进来，总数又回到 2。在那之后不久，因为已经过了 `4` 事件两秒，它又降到 1。然后稍后，当 `5` 事件发生两秒后，它又降到 0。
 
-That middle section is the messiest, but it's also most representative of the kind of activity this operator is designed to deal with. Remember, the whole point here is that we're expecting to see flurries of activity, and if those represents filesystem activity, they will tend to be slightly chaotic in nature, because storage devices don't always have entirely predictable performance characteristics (especially if it's a magnetic storage device with moving parts, or remote storage in which variable networking delays might come into play).
+中间部分最混乱，但也是这个操作符设计的那种活动最能代表的类型。记住，这里的全部重点是，我们希望看到活动的阵发，如果这些代表的是文件系统活动，它们往往会略显混乱，因为存储设备并不总是有完全可预测的性能特征（特别是如果它是带有移动部件的磁存储设备，或者在其中可能出现可变网络延迟的远程存储）。
 
-With this measure of recent activity in hand, we can spot the end of bursts of activity by watching for when `outstanding` drops back to zero, which is what the observable referred to by `zeroCrossing` in the code above does. (That's just using the `Where` operator to filter out everything except the events where `outstanding`'s current value returns to zero.)
+有了这个最近活动的度量，我们可以通过寻找 `outstanding` 回落到零的时间来发现活动阵发的结束，这就是代码中 `zeroCrossing` 引用的可观测对象所做的。（这只是使用 `Where` 操作符过滤掉除 `outstanding` 的当前值回到零以外的所有事件。）
 
-But how does `outstanding` itself work? The basic approach here is that every time `source` produces a value, we actually create a brand new `IObservable<int>`, which produces exactly two values. It immediately produces the value 1, and then after the specified timespan (2 seconds in these examples) it produces the value -1. That's what's going in in this clause of the query expression:
+但 `outstanding` 本身是如何工作的呢？这里的基本方法是，每次 `source` 产生一个值时，我们实际上会创建一个全新的 `IObservable<int>`，它会产生两个确切的值。它立即产生值 1，然后在指定的时间跨度后（这些示例中是 2 秒，但通常是 `minimumInactivityPeriod`）产生值 -1。这就是查询表达式中的这个子句发生的事情：
 
 ```csharp
 from delta in Observable
@@ -176,67 +176,67 @@ from delta in Observable
         .Delay(minimumInactivityPeriod, scheduler))
 ```
 
-I said Rx is all about composition, and that's certainly the case here. We are using the very simple `Return` operator to create an `IObservable<int>` that immediately produces just a single value and then terminates. This code calls that twice, once to produce the value `1` and again to produce the value `-1`. It uses the `Delay` operator so that instead of getting that `-1` value immediately, we get an observable that waits for the specified time period (2 seconds in these examples, but whatever `minimumInactivityPeriod` is in general) before producing the value. And then we use `Concat` to stitch those two together into a single `IObservable<int>` that produces the value `1`, and then two seconds later produces the value `-1`.
+我说过 Rx 是关于组合的，这里绝对是这样。我们正在使用非常简单的 `Return` 操作符创建一个 `IObservable<int>`，它立即产生一个单一值然后终止。这段代码调用了两次，一次是产生值 `1`，另一次是产生值 `-1`。它使用 `Delay` 操作符，以便我们不是立即获得 -1 值，而是获得一个等待指定时间段的可观察对象（在这些示例中是 2 秒，但通常是任何 `minimumInactivityPeriod`），然后再产生该值。然后我们使用 `Concat` 将这两个合并成一个单一的 `IObservable<int>`，它产生值 1，然后两秒后产生值 -1。
 
-Although this produces a brand new `IObservable<int>` for each `source` event, the `from` clause shown above is part of a query expression of the form `from ... from .. select`, which the C# compiler turns into a call to `SelectMany`, which has the effect of flattening those all back into a single observable, which is what the `onoffs` variable refers to. This marble diagram illustrates that:
+虽然这为每个 `source` 事件产生了一个全新的 `IObservable<int>`，但上面显示的 `from` 子句是一个形式为 `from ... from .. select` 的查询表达式的一部分，C# 编译器将其转换为对 `SelectMany` 的调用，这具有将这些全部压平回到单个可观察对象的效果，这正是 `onoffs` 变量所指的。这个弹珠图说明了这一点：
 
-![The number of outstanding events as a graph. Several Rx marble diagrams, starting with the 'source' observable from earlier figures, followed by one labelled with the LINQ query expression in the preceding example, which shows 6 separate marble diagrams, one for each of the elements produced by 'source'. Each consists of two events: one with value 1, positioned directly beneath the corresponding event on 'source' to indicate that they happen simultaneously, and then one with the value -1 two seconds later. Beneath this is a marble diagram labelled 'onoffs' which contains all the same events from the preceding 6 diagrams, but merged into a single sequence. These are all colour coded ot make it easier to see how these events correspond to the original events on 'source'. Finally, we have the 'outstanding' marble diagram which is exactly the same as in the preceding figure.](GraphicsIntro/Ch02-Quiescent-Marbles-On-Offs.svg)
+![未决事件数量的图表。显示了几个 Rx 弹珠图，从先前图表中的“source”可观察对象开始，接着是前面示例中的 LINQ 查询表达式标记的一条线，显示了 6 个单独的弹珠图，每个都对应于“source”产生的元素之一。每个由两个事件组成：第一个事件的值为 1，位于“source”上相应事件的正下方，表示它们同时发生，然后第二个事件的值为 -1，两秒后发生。在这之下是一个标记为“onoffs”的弹珠图，其中包含前一个图中所有的事件，但合并成一个单一的序列。这些都进行了颜色编码，以便更容易看出这些事件与“source”上的原始事件的对应关系。最后，我们有前一个图中完全相同的“outstanding”弹珠图。](GraphicsIntro/Ch02-Quiescent-Marbles-On-Offs.svg)
 
-This also shows the `outstanding` observable again, but we can now see where that comes from: it is just the running total of the values emitted by the `onoffs` observable. This running total observable is created with this code:
+这也显示了 `outstanding` 可观测对象，但现在我们可以看到它从何而来：它只是 `onoffs` 可观测对象发出的值的累积总和。这个运行总数可观测对象是用以下代码创建的：
 
 ```csharp
 IObservable<int> outstanding = onoffs.Scan(0, (total, delta) => total + delta);
 ```
 
-Rx's `Scan` operator works much like the standard LINQ [`Aggregate`](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/concepts/linq/aggregation-operations) operator, in that it cumulatively applies an operation (addition, in this case) to every single item in a sequence. The different is that whereas `Aggregate` produces just the final result once it reaches the end of the sequence, `Scan` shows all of its working, producing the accumulated value so far after each input. So this means that `outstanding` will produce an event every time `onoffs` produces one, and that event's value will be the running total—the sum total of every value from `onoffs` so far.
+Rx 的 `Scan` 操作符的工作方式类似于标准 LINQ 的 [`Aggregate`](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/concepts/linq/aggregation-operations) 操作符，它将一个操作（这里是加法）累积地应用于序列中的每个项目。不同的是，`Aggregate` 一旦到达序列的末尾就只产生最终结果，而 `Scan` 显示其所有工作，每个输入后产生迄今为止的累积值。因此，这意味着每次 `onoffs` 产生一个事件时，`outstanding` 也会产生一个事件，该事件的值将是到目前为止从 `onoffs` 中的所有值的总和。
 
-So that's how `outstanding` comes to tell us how many events `source` produced within the last two seconds (or whatever `minimumActivityPeriod` has been specified).
+这就是 `outstanding` 如何告诉我们在过去两秒内（或指定的 `minimumActivityPeriod`）`source` 产生了多少事件。
 
-The final piece of the puzzle is how we go from the `zeroCrossings` (which produces an event every time the source has gone quiescent) to the output `IObservable<IList<T>>`, which provides all of the events that happened in the most recent burst of activity. Here we're just using Rx's `Buffer` operator, which is designed for exactly this scenario: it slices its input into chunks, producing an event for each chunk, the value of which is an `IList<T>` containing the items for the chunk. `Buffer` can slice things up a few ways, but in this case we're using the form that starts a new slice each time some `IObservable<T>` produces an item. Specifically, we're telling `Buffer` to slice up the `source` by creating a new chunk every time `zeroCrossings` produces a new event.
+最后一个难题是如何从提到的 `zeroCrossings`（每次源变得沉寂时产生一个事件）转到输出 `IObservable<IList<T>>`，它提供最近一次活动中发生的所有事件。这里我们只是在使用 Rx 的 `Buffer` 操作符，这个操作符正是为这种场景设计的：它将其输入切成块，为每个块产生一个事件，其值是一个 `IList<T>`，包含该块的项。`Buffer` 可以以几种方式切分事物，但在这种情况下，我们使用的是那种在某个 `IObservable<T>` 产生一个项目时就开始一个新的块的形式。具体来说，我们告诉 `Buffer` 通过在 `zeroCrossings` 产生新事件时切分 `source` 来切分它。
 
-(One last detail, just in case you saw it and were wondering, is that this method requires an `IScheduler`. This is an Rx abstraction for dealing with timing and concurrency. We need it because we need to be able to generate events after a one second delay, and that sort of time-driven activity requires a scheduler.)
+（最后一个细节，以防你看到它并想知道，这个方法需要一个 `IScheduler`。这是一个 Rx 抽象，用于处理定时和并发。我们需要它，因为我们需要能够在一秒钟的延迟之后生成事件，这种以时间驱动的活动需要一个调度器。）
 
-We'll get into all of these operators and the workings of schedulers in more detail in later chapters. For now, the key point is that we typically use Rx by creating a combination of LINQ operators that process and combine `IObservable<T>` sources to define the logic that we require.
+我们将在后面的章节中更详细地了解这些操作符和调度器的工作原理。现在，关键点是我们通常通过创建一系列 LINQ 操作符的组合，这些操作符处理和组合 `IObservable<T>` 源来定义我们需要的逻辑。
 
-Notice that nothing in that example actually called the one and only method that `IObservable<T>` defines (`Subscribe`). There will always be something somewhere that ultimately consumes the events, but most of the work of using Rx tends to entail declaratively defining the `IObservable<T>`s we need.
+请注意，在该示例中没有任何内容实际调用 `IObservable<T>` 定义的唯一方法（`Subscribe`）。总会有某个地方最终消费事件，但使用 Rx 的大部分工作往往涉及声明性地定义我们需要的 `IObservable<T>`。
 
-Now that you've seen an example of what Rx programming looks like, we can address some obvious questions about why Rx exists at all.
+现在您已经看到了 Rx 编程的示例，我们可以解决一些关于为什么 Rx 根本存在的明显问题。
 
-### What was wrong with .NET Events?
+### .NET 事件有什么问题？
 
-.NET has had built-in support for events from the very first version that shipped over two decades ago—events are part of .NET's type system. The C# language has intrinsic support for this in the form of the `event` keyword, along with specialized syntax for subscribing to events. So why, when Rx turned up some 10 years later, did it feel the need to invent its own representation for streams of events? What was wrong with the `event` keyword?
+.NET 从第一个版本开始就内置了对事件的支持——事件是 .NET 类型系统的一部分。C# 语言对此有内置支持，以 `event` 关键字的形式，以及用于订阅事件的专门语法。那么，当 Rx 十年后出现时，为什么感到有必要发明自己的事件流表示呢？`event` 关键字有什么问题？
 
-The basic problem with .NET events is that they get special handling from the .NET type system. Ironically, this makes them less flexible than if there had been no built-in support for the idea of events. Without .NET events, we would have needed some sort of object-based representation of events, at which point you can do all the same things with events that you can do with any other objects: you could store them in fields, pass them as arguments to methods, define methods on them and so on.
+.NET 事件的基本问题是它们从 .NET 类型系统中获得了特殊处理。讽刺的是，这使它们比没有内置事件支持时的灵活性更低。如果没有 .NET 事件，我们就需要某种基于对象的事件表示，此时你可以对事件做所有可以对其他对象做的事情：你可以将它们存储在字段中，将它们作为方法参数传递，定义它们的方法等等。
 
-To be fair to .NET version 1, it wasn't really possible to define a good object-based representation of events without generics, and .NET didn't get those until version 2 (three and a half years after .NET 1.0 shipped). Different event sources need to be able to report different data, and .NET events provided a way to parameterize events by type. But once generics came along, it became possible to define types such as `IObservable<T>`, and the main advantage that events offered went away. (The other benefit was some language support for implementing and subscribing to events, but in principle that's something that could have been done for Rx if Microsoft had chosen to. It's not a feature that required events to be fundamentally different from other features of the type system.)
+公平地说，.NET 版本 1，它在没有泛型的情况下实际上是不可能定义出一个良好的基于对象的事件表示的，而 .NET 直到版本 2 才获得了泛型（在 .NET 1.0 发布三年半后）。不同的事件来源需要能够按类型参数化事件，.NET 事件提供了一种方式。但是一旦有了泛型，像 `IObservable<T>` 这样的类型就变得可能定义了，此时事件提供的主要优势就消失了。（另一个好处是对实现和订阅事件的一些语言支持，但原则上这是可以为 Rx 做的事情，它不需要事件从根本上与类型系统的其他功能不同。）
 
-Consider the example we've just worked through. It was possible to define our own custom LINQ operator, `Quiescent`, because `IObservable<T>` is just an interface like any other, meaning that we're free to write extension methods for it. You can't write an extension method for an event.
+考虑我们刚刚处理过的示例。能够定义我们自己的自定义 LINQ 操作符 `Quiescent`，因为 `IObservable<T>` 像任何其他接口一样，意味着我们可以为其编写扩展方法。你不能为事件编写扩展方法。
 
-Also, we are able to wrap or adapt `IObservable<T>` sources. `Quiescent` took an `IObservable<T>` as an input, and combined various Rx operators to produce another observable as an output. Its input was a source of events that could be subscribed to, and its output was also a source of events that could be subscribed to. You can't do this with .NET events—you can't write a method that accepts an event as an argument, or that returns an event.
+此外，我们能够包装或适配 `IObservable<T>` 源。`Quiescent` 将一个 `IObservable<T>` 作为输入，并结合各种 Rx 操作符生成另一个可观察对象作为输出。其输入是可以订阅的事件源，其输出也是可以订阅的事件源。你不能用 .NET 事件这样做——你不能写一个接受事件作为参数的方法，或者返回一个事件。
 
-These limitations are sometimes described by saying that .NET events are not _first class citizens_. There are things you can do with values or references in .NET that you can't do with events.
+这些限制有时被描述为 .NET 事件不是 _一等公民_。有些事情你可以用 .NET 中的值或引用做，但你不能用事件做。
 
-If we represent an event source as a plain old interface, then it _is_ a first class citizen: it can use all of the functionality we expect with other objects and values precisely because it's not something special.
+如果我们将事件源表示为一个普通的接口，那么它就 _是_ 一个一等公民：它可以使用我们希望与其他对象和值一样的所有功能，正是因为它不是特殊的。
 
-### What about Streams?
+### 那么流呢？
 
-I've described `IObservable<T>` as representing a _stream_ of events. This raises an obvious question: .NET already has [`System.IO.Stream`](https://learn.microsoft.com/en-us/dotnet/api/system.io.stream), so why not just use that?
+我将 `IObservable<T>` 描述为表示事件的 _流_。这引起了一个明显的问题：.NET 已经有了 [`System.IO.Stream`](https://learn.microsoft.com/en-us/dotnet/api/system.io.stream)，那为什么不直接使用呢？
 
-The short answer is that streams are weird because they represent an ancient concept in computing dating back long before the first ever Windows operating system shipped, and as such they have quite a lot of historical baggage. This means that even a scenario as simple as "I have some data, and want to make that available immediately to all interested parties" is surprisingly complex to implement though the `Stream` type.
+简短的答案是流很奇怪，因为它们代表着计算的一个古老概念，早在第一个 Windows 操作系统发布之前就已经存在了，因此它们带有相当多的历史包袱。这意味着即使是如“我有一些数据，想立即让所有感兴趣的方都能访问它”这样简单的场景，在 `Stream` 类型中实现起来也出奇地复杂。
 
-Moreover, `Stream` doesn't provide any way to indicate what type of data will emerge—it only knows about bytes. Since .NET's type system supports generics, it is natural to want the types that represent event streams to indicate the event type through a type parameter.
+此外，`Stream` 无法表明哪种类型的数据将出现——它只知道字节。由于 .NET 的类型系统支持泛型，我们自然希望表示事件流的类型可以通过类型参数指示事件类型。
 
-So even if you did use `Stream` as part of your implementation, you'd want to introduce some sort of wrapper abstraction. If `IObservable<T>` didn't exist, you'd need to invent it.
+所以即使你确实在实现中使用了 `Stream`，你也会希望引入某种形式的包装抽象。如果 `IObservable<T>` 不存在，你就需要发明它。
 
-It's certainly possible to use IO streams in Rx, but they are not the right primary abstraction.
+当然，可能使用 IO 流在 Rx 中，但它们不是正确的主抽象。
 
-(If you are unconvinced, see [Appendix A: What's Wrong with Classic IO Streams](A_IoStreams.md) for a far more detailed explanation of exactly why `Stream` is not well suited to this task.)
+（如果你不信服，请参阅[附录 A：传统 IO 流的问题所在](A_IoStreams.md)，它对为什么 `Stream` 不适合这项任务进行了更详细的解释。）
 
-Now that we've seen why `IObservable<T>` needs to exist, we need to look at its counterpart, `IObserver<T>`.
+现在我们已经看到了为什么需要 `IObservable<T>`，我们需要看看它的对等接口 `IObserver<T>`。
 
 ## `IObserver<T>`
 
-Earlier, I showed the definition of `IObservable<T>`. As you saw, it has just one method, `Subscribe`. And this method takes just one argument, of type [`IObserver<T>`](https://learn.microsoft.com/en-us/dotnet/api/system.iobserver-1). So if you want to observe the events that an `IObservable<T>` has to offer, you must supply it with an `IObserver<T>`. In the examples so far, we've just supplied a simple callback, and Rx has wrapped that in an implementation of `IObserver<T>` for us, but even though this is very often the way we will receive notifications in practice, you still need to understand `IObserver<T>` to use Rx effectively. It is not a complex interface:
+之前，我展示了 `IObservable<T>` 的定义。如你所见，它只有一个方法，`Subscribe`。而这个方法只接受一个参数，类型为 [`IObserver<T>`](https://learn.microsoft.com/en-us/dotnet/api/system.iobserver-1)。所以如果你想观察 `IObservable<T>` 所提供的事件，你必须为其提供一个 `IObserver<T>`。到目前为止，我们只是提供了一个简单的回调，并且 Rx 为我们包装成了 `IObserver<T>` 的实现，但即使这通常是我们实际接收通知的方式，你仍然需要了解 `IObserver<T>` 以有效使用 Rx。这不是一个复杂的接口：
 
 ```csharp
 public interface IObserver<in T>
@@ -247,9 +247,9 @@ public interface IObserver<in T>
 }
 ```
 
-As with `IObservable<T>`, you can find [the source for `IObserver<T>`](https://github.com/dotnet/runtime/blob/7cf329b773fa5ed544a9377587018713751c73e3/src/libraries/System.Private.CoreLib/src/System/IObserver.cs) in the .NET runtime GitHub repository, because both of these interfaces are built into the runtime libraries.
+就像 `IObservable<T>` 一样，你可以在 .NET 运行时 GitHub 仓库中找到 [`IObserver<T>` 的源代码](https://github.com/dotnet/runtime/blob/7cf329b773fa5ed544a9377587018713751c73e3/src/libraries/System.Private.CoreLib/src/System/IObserver.cs)，因为这两个接口都内置于运行时库中。
 
-If we wanted to create an observer that printed values to the console it would be as easy as this:
+如果我们想创建一个将值打印到控制台的观察者，那么做起来就像这样简单：
 
 ```csharp
 public class MyConsoleObserver<T> : IObserver<T>
@@ -271,7 +271,7 @@ public class MyConsoleObserver<T> : IObserver<T>
 }
 ```
 
-In the preceding chapter, I used a `Subscribe` extension method that accepted a delegate which it invoked each time the source produced an item. This method is defined by Rx's `ObservableExtensions` class, which also defines various other extension methods for `IObservable<T>`. It includes overloads of `Subscribe` that enable me to write code that has the same effect as the preceding example, without needing to provide my own implementation of `IObserver<T>`:
+在前一章中，我使用了一个 `Subscribe` 扩展方法，它接受了一个当源产生一个项目时调用的委托。这个方法由 Rx 的 `ObservableExtensions` 类定义，它还定义了 `IObservable<T>` 的各种其他扩展方法。它包括 `Subscribe` 的重载，使我能够编写代码，其效果与前面的示例相同，而无需提供我自己的 `IObserver<T>` 实现：
 
 ```csharp
 source.Subscribe(
@@ -281,49 +281,49 @@ source.Subscribe(
 );
 ```
 
-The overloads of `Subscribe` where we don't pass all three methods (e.g., my earlier example just supplied a single callback corresponding to `OnNext`) are equivalent to writing an `IObserver<T>` implementation where one or more of the methods simply has an empty body. Whether we find it more convenient to write our own type that implements `IObserver<T>`, or just supply callbacks for some or all of its `OnNext`, `OnError` and `OnCompleted` method, the basic behaviour is the same: an `IObservable<T>` source reports each event with a call to `OnNext`, and tells us that the events have come to an end either by calling `OnError` or `OnCompleted`.
+我们没有传递所有三个方法的 `Subscribe` 重载（例如，我之前的示例只提供了一个对应于 `OnNext` 的单个回调），相当于编写了一个 `IObserver<T>` 实现，其中一个或多个方法只是空的。无论我们是觉得编写自己的 `IObserver<T>` 实现更方便，还是只是为其 `OnNext`、`OnError` 和 `OnCompleted` 方法中的一些或全部提供回调，基本行为都是相同的：`IObservable<T>` 源通过调用 `OnNext` 报告每个事件，并通过调用 `OnError` 或 `OnCompleted` 告诉我们事件已结束。
 
-If you're wondering whether the relationship between `IObservable<T>` and `IObserver<T>` is similar to the relationship between [`IEnumerable<T>`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerable-1) and [`IEnumerator<T>`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerator-1), then you're onto something. Both `IEnumerable<T>` and `IObservable<T>` represent _potential_ sequences. With both of these interfaces, they will only supply data if we ask them for it. To get values out of an `IEnumerable<T>`, an `IEnumerator<T>` needs to come into existence, and similarly, to get values out of an `IObservable<T>` requires an `IObserver<T>`.
+如果你想知道 `IObservable<T>` 与 `IObserver<T>` 之间的关系是否与 [`IEnumerable<T>`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerable-1) 和 [`IEnumerator<T>`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerator-1) 之间的关系相似，那么你是对的。`IEnumerable<T>` 和 `IObservable<T>` 都表示 _潜在_ 序列。对于这两个接口，它们只有在我们要求它们提供数据时才会提供数据。要从 `IEnumerable<T>` 获取值，需要存在一个 `IEnumerator<T>`；类似地，要从 `IObservable<T>` 获取值，需要一个 `IObserver<T>`。
 
-The difference reflects the fundamental _pull vs push_ difference between `IEnumerable<T>` and `IObservable<T>`. Whereas with `IEnumerable<T>` we ask the source to create an `IEnumerator<T>` for us which we can then use to retrieve items (which is what a C# `foreach` loop does), with `IObservable<T>`, the source does not _implement_ `IObserver<T>`: it expects _us_ to supply an `IObserver<T>` and it will then push its values into that observer.
+差异反映了 `IEnumerable<T>` 与 `IObservable<T>` 之间根本的 _拉取与推送_ 差异。而 `IEnumerable<T>` 允许源为我们创建一个 `IEnumerator<T>`，我们随后可以使用它来检索项目（这是 C# `foreach` 循环所做的），在 `IObservable<T>` 中，源不 _实现_ `IObserver<T>`：它期望 _我们_ 提供一个 `IObserver<T>`，然后将其值推送到该观察者。
 
-So why does `IObserver<T>` have these three methods? Remember when I said that in an abstract sense, `IObserver<T>` represents the same thing as `IEnumerable<T>`? I meant it. It might be an abstract sense, but it is precise: `IObservable<T>` and `IObserver<T>` were designed to preserve the exact meaning of `IEnumerable<T>` and `IEnumerator<T>`, changing only the detailed mechanism of consumption.
+那么为什么 `IObserver<T>` 有这三种方法呢？记得我说过从抽象意义上说 `IObserver<T>` 代表与 `IEnumerable<T>` 相同的东西吗？我的意思是这是准确的：`IObservable<T>` 和 `IObserver<T>` 的设计目的是保留 `IEnumerable<T>` 和 `IEnumerator<T>` 的确切含义，只改变消费的具体机制。
 
-To see what that means, think about what happens when you iterate over an `IEnumerable<T>` (with, say, a `foreach` loop). With each iteration (and more precisely, on each call to the enumerator's [`MoveNext`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.ienumerator.movenext) method) there are three things that could happen:
+要了解这意味着什么，可以考虑当你遍历 `IEnumerable<T>`（比如说，使用 `foreach` 循环）时会发生什么。在每次迭代（更准确地说，每次调用枚举器的 [`MoveNext`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.ienumerator.movenext) 方法时），可能会发生以下三种情况之一：
 
-* `MoveNext` could return `true` to indicate that a value is available in the enumerator's [`Current`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerator-1.current) property
-* `MoveNext` could throw an exception
-* `MoveNext` could return `false` to indicate that you've reached the end of the collection
+* `MoveNext` 可能返回 `true`，表示枚举器的 [`Current`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerator-1.current) 属性中有一个可用的值
+* `MoveNext` 可能抛出一个异常
+* `MoveNext` 可能返回 `false`，表示你已经到达了集合的末尾
 
-These three outcomes correspond precisely to the three methods defined by `IObserver<T>`. We could describe these in slightly more abstract terms:
+这三种结果正好对应于 `IObserver<T>` 定义的三种方法。我们可以用稍微更抽象的术语来描述这些：
 
-* Here's another item
-* It has all gone wrong
-* There are no more items
+* 这是另一个项目
+* 全部出错了
+* 没有更多的项目了
 
-That describes the three things that either can happen next when consuming either an `IEnumerable<T>` or an `IObservable<T>`. The only difference is the means by which consumers discover this. With an `IEnumerable<T>` source, each call to `MoveNext` will tell us which of these three applies. And with an `IObservable<T>` source, it will tell you one of these three things with a call to the corresponding member of your `IObserver<T>` implementation.
+这描述了在消费 `IEnumerable<T>` 或 `IObservable<T>` 时下一步可能发生的三件事之一。唯一的区别是消费者发现这一点的方式。对于 `IEnumerable<T>` 来说，每次调用 `MoveNext` 会告诉我们这三者中的哪一个适用。而对于 `IObservable<T>` 来说，它会通过调用你的 `IObserver<T>` 实现的相应成员告诉你这三者中的哪一个。
 
-## The Fundamental Rules of Rx Sequences
+## Rx 序列的基本规则
 
-Notice that two of the three outcomes in the list above are terminal. If you're iterating through an `IEnumerable<T>` with a `foreach` loop, and it throws an exception, the `foreach` loop will terminate. The C# compiler understands that if `MoveNext` throws, the `IEnumerator<T>` is now done, so it disposes it and then allows the exception to propagate. Likewise, if you get to the end of a sequence, then you're done, and the compiler understands that too: the code it generates for a `foreach` loop detects when `MoveNext` returns false and when that happens it disposes the enumerator and then moves onto the code after the loop.
+注意上面列表中的两个结果是终结性的。如果你在 `IEnumerable<T>` 上进行 `foreach` 循环，并且它抛出了异常，`foreach` 循环将终止。C# 编译器理解如果 `MoveNext` 抛出异常，`IEnumerator<T>` 现在已完成，所以它会将其处理并允许异常传播。同样，如果你到达序列的末尾，那么你也完成了，编译器理解这一点：`foreach` 循环检测到 `MoveNext` 返回 `false` 后，它会处理枚举器，然后转到循环之后的代码。
 
-These rules might seem so obvious that we might never even think about them when iterating over `IEnumerable<T>` sequences. What might be less immediately obvious is that exactly the same rules apply for an `IObservable<T>` sequence. If an observable source either tells an observer that the sequence has finished, or reports an error, then in either case, that is the last thing the source is allowed to do to the observer.
+这些规则可能看起来非常明显，以至于我们在遍历 `IEnumerable<T>` 序列时可能从未想过它们。可能不那么立即明显的是 `IObservable<T>` 序列适用完全相同的规则。如果可观察源告诉观察者序列已经结束，或报告错误，那么在任何一种情况下，这都是源允许对观察者做的最后一件事。
 
-That means these examples would be breaking the rules:
+这意味着这些示例将违反规则：
 
 ```csharp
 public static void WrongOnError(IObserver<int> obs)
 {
     obs.OnNext(1);
     obs.OnError(new ArgumentException("This isn't an argument!"));
-    obs.OnNext(2);  // Against the rules! We already reported failure, so iteration must stop
+    obs.OnNext(2);  // 违反规则！我们已经报告失败，所以迭代必须停止
 }
 
 public static void WrongOnCompleted(IObserver<int> obs)
 {
     obs.OnNext(1);
     obs.OnCompleted();
-    obs.OnNext(2);  // Against the rules! We already said we were done, so iteration must stop
+    obs.OnNext(2);  // 违反规则！我们已经说完了，所以迭代必须停止
 }
 
 public static void WrongOnErrorAndOnCompleted(IObserver<int> obs)
@@ -331,8 +331,7 @@ public static void WrongOnErrorAndOnCompleted(IObserver<int> obs)
     obs.OnNext(1);
     obs.OnError(new ArgumentException("A connected series of statements was not supplied"));
 
-    // This next call is against the rules because we reported an error, and you're not
-    // allowed to make any further calls after you did that.
+    // 下一个调用违反了规则，因为我们报告了一个错误，并且在做了那之后不允许再进行任何调用。
     obs.OnCompleted();
 }
 
@@ -341,41 +340,42 @@ public static void WrongOnCompletedAndOnError(IObserver<int> obs)
     obs.OnNext(1);
     obs.OnCompleted();
 
-    // This next call is against the rule because already said we were done.
-    // When you terminate a sequence you have to pick between OnCompleted or OnError
+    // 下一个调用违反了规则，因为我们已经说我们完成了。
+    // 当你终止一个序列时，你必须在 OnCompleted 或 OnError 之间选择
     obs.OnError(new ArgumentException("Definite proposition not established"));
 }
 ```
 
-These correspond in a pretty straightforward way to things we already know about `IEnumerable<T>`:
+这些在 `IEnumerable<T>` 中有明显对应：
 
-* `WrongOnError`: if an enumerator throws from `MoveNext`, it's done and you mustn't call `MoveNext` again, so you won't be getting any more items out of it
-* `WrongOnCompleted`: if an enumerator returns `false` from `MoveNext`, it's done and you mustn't call `MoveNext` again, so you won't be getting any more items out of it
-* `WrongOnErrorAndOnCompleted`: if an enumerator throws from `MoveNext`, that means its done, it's done and you mustn't call `MoveNext` again, meaning it won't have any opportunity to tell that it's done by returning `false` from `MoveNext`
-* `WrongOnCompletedAndOnError`: if an enumerator returns `false` from `MoveNext`, it's done and you mustn't call `MoveNext` again,  meaning it won't have any opportunity to also throw an exception
+* `WrongOnError`：如果枚举器从 `MoveNext` 抛出异常，那么它就完成了，你不得再调用 `MoveNext`，这样你就不会再从它那里获取更多项
+* `WrongOnCompleted`：如果枚举器从 `MoveNext` 返回 `false`，那么它就完成了，你不得再调用 `MoveNext`，这样你就不会再从它那里获取更多项
+* `WrongOnErrorAndOnCompleted`：如果枚举器从 `MoveNext` 抛出异常，这意味着它已完成，并且你不得再调用 `MoveNext`，这意味着它将不会有机会通过从 `MoveNext` 返回 `false` 来告诉它已经完成
+* `WrongOnCompletedAndOnError`：如果枚举器从 `MoveNext` 返回 `false`，那么它就完成了，你不得再调用 `MoveNext`，这意味着它也不会有机会抛出异常
 
-Because `IObservable<T>` is push-based, the onus for obeying all of these rules fall on the observable source. With `IEnumerable<T>`, which is pull-based, it's up to the code using the `IEnumerator<T>` (e.g. a `foreach` loop) to obey these rules. But they are essentially the same rules.
+因为 `IObservable<T>` 是基于推送的，遵守所有这些规则的责任落在了可观察源上。对于 `IEnumerable<T>`，这是基于拉取的，使用 `IEnumerator<T>` 的代码（例如 `foreach` 循环）负责遵守这些规则。但它们本质上是相同的规则。
 
-There's an additional rule for `IObserver<T>`: if you call `OnNext` you must wait for it to return before making any more method calls into the same `IObserver<T>`. That means this code breaks the rules:
+`IObserver<T>` 还有一个附加规则：如果你调用 `OnNext`，你必须等待它返回才能进行更多方法调用到同一个 `IObserver<T>`。这意味着以下代码违反了规则：
 
 ```csharp
-public static void EverythingEverywhereAllAtOnce(IEnumerable<int> obs)
+public static void EverythingEverywhereAllAtOnce(IObserver<int> obs)
 {
     Random r = new();
     for (int i = 0; i < 10000; ++i)
     {
         int v = r.Next();
-        Task.Run(() => obs.OnNext(v)); // Against the rules!
-    }}
+        Task.Run(() => obs.OnNext(v)); // 违反规则！
+    }
+}
 ```
 
-This calls `obs.OnNext` 10,000 times, but it executes these calls as individual tasks to be run on the thread pool. The thread pool is designed to be able to execute work in parallel, and that's a a problem here because nothing here ensures that one call to `OnNext` completes before the next begins. We've broken the rule that says we must wait for each call to `OnNext` to return before calling either `OnNext`, `OnError`, or `OnComplete` on the same observer. (Note: this assumes that the caller won't subscribe the same observer to multiple different sources. If you do that, you can't assume that all calls to its `OnNext` will obey the rules, because the different sources won't have any way of knowing they're talking to the same observer.)
+这在 `obs` 上调用了 `OnNext` 10,000 次，却将这些调用作为单独的任务在线程池上运行。线程池设计为能够并行执行工作，这里是个问题，因为没有任何东西确保一个 `OnNext` 调用在下一个开始之前完成。我们违反了规则，规则是说我们必须等待每次调用 `OnNext` 返回再调用 `OnNext`、`OnError` 或 `OnComplete`。
 
-This rule is the only form of back pressure built into Rx.NET: since the rules forbid calling `OnNext` if a previous call to `OnNext` is still in progress, this enables an `IObserver<T>` to limit the rate at which items arrive. If you just don't return from `OnNext` until you're ready, the source is obliged to wait. However, there are some issues with this. Once [schedulers](11_SchedulingAndThreading.md) get involved, the underlying source might not be connected directly to the final observer. If you use something like [`ObserveOn`](11_SchedulingAndThreading.md#subscribeon-and-observeon) it's possible that the `IObserver<T>` subscribed directly to the source just puts items on a queue and immediately returns, and those items will then be delivered to the real observer on a different thread. In these cases, the 'back pressure' caused by taking a long time to return from `OnNext` only propagates as far as the code pulling items off the queue. 
+这个规则是 Rx.NET 内置的唯一形式的反压力：由于规则禁止在上一次 `OnNext` 调用仍在进行中时调用 `OnNext`，这使得 `IObserver<T>` 能够限制项目到达的速率。如果你只是等到从 `OnNext` 返回时才准备好，那么源就被迫要等待。然而，这里还有一些问题。一旦涉及[调度器](11_SchedulingAndThreading.md)，底层源可能不直接连接到最终的观察者。如果你使用类似 [`ObserveOn`](11_SchedulingAndThreading.md#subscribeon-and-observeon) 的东西，那么直接订阅源的 `IObserver<T>` 可能只是将项目放在队列中然后立即返回，然后这些项目将在不同的线程上交付给真正的观察者。在这些情况下，由于花长时间从 `OnNext` 返回而造成的“反压力”只会传播到从队列中拉取项目的代码那里。
 
-It may be possible to use certain Rx operators (such as [`Buffer`](08_Partitioning.md#buffer) or [`Sample`](12_Timing.md#sample)) to mitigate this, but there are no built-in mechanisms for cross-thread propagation of back pressure. Some Rx implementations on other platforms have attempted to provide integrated solutions for this; in the past when the Rx.NET development community has looked into this, some thought that these solutions were problematic, and there is no consensus on what a good solution looks like. So with Rx.NET, if you need to arrange for sources to slow down when you are struggling to keep up, you will need to introduce some mechanism of your own. (Even with Rx platforms that do offer built-in back pressure, they can't provide a general-purpose answer to the question: how do we make this source provide events more slowly? How (or even whether) you can do that will depend on the nature of the source. So some bespoke adaptation is likely to be necessary in any case.)
+尽管存在某些 Rx 操作符（例如 [`Buffer`](08_Partitioning.md#buffer) 或 [`Sample`](12_Timing.md#sample)）可以缓解这一点，但没有内置机制用于跨线程传播反压力。其他平台上的一些 Rx 实现尝试提供了这种整合解决方案；过去当 Rx.NET 开发社区研究这个问题时，一些人认为这些解决方案存在问题，并且没有关于什么是好的解决方案的共识。所以在 Rx.NET 上，如果你需要安排源在你难以跟上时减慢速度，你将需要引入你自己的一些机制。(即使是提供内置反压力的 Rx 平台，它们也无法提供一种通用的解决方案来回答这个问题：我们如何使这个源提供事件更慢？如何（甚至是否）你可以做到这一点将取决于源的性质。所以在任何情况下，一些定制的调整可能都是必要的。)
 
-This rule in which we must wait for `OnNext` to return is tricky and subtle. It's perhaps less obvious than the others, because there's no equivalent rule for `IEnumerable<T>`—the opportunity to break this rule only arises when the source pushes data into the application. You might look at the example above and think "well who would do that?" However, multithreading is just an easy way to show that it is technically possible to break the rule. The harder cases are where single-threaded re-entrancy occurs. Take this code:
+这个规则必须在 `OnNext` 返回之前等待是微妙并且棘手的。它可能不如其他规则那么明显，因为这种破坏这一规则的机会只出现在源向应用程序推送数据时。你可能会看着上面的示例并想：“嗯，谁会那么做？”然而，多线程只是表明技术上有可能破坏这一规则的一种简单方式。更难的情况是单线程重入发生时。考虑这段代码：
 
 ```csharp
 public class GoUntilStopped
@@ -405,11 +405,11 @@ public class GoUntilStopped
 }
 ```
 
-This class takes an `IObserver<int>` as a constructor argument. When you call its `Go` method, it repeatedly calls the observer's `OnNext` until something calls its `Stop` method.
+这个类接受一个 `IObserver<int>` 作为构造函数参数。当你调用它的 `Go` 方法时，它会重复调用观察者的 `OnNext`，直到有东西调用它的 `Stop` 方法。
 
-Can you see the bug?
+你能看出这里的 bug 吗？
 
-We can take a look at what happens by supplying an `IObserver<int>` implementation:
+我们可以通过提供一个 `IObserver<int>` 实现来查看会发生什么：
 
 ```csharp
 public class MyObserver : IObserver<int>
@@ -444,9 +444,9 @@ public class MyObserver : IObserver<int>
 }
 ```
 
-Notice that the `OnNext` method looks at its input, and if it's greater than 3, it tells the `GoUntilStopped` object to stop.
+注意 `OnNext` 方法查看其输入，如果大于 3，它会告诉 `GoUntilStopped` 对象停止。
 
-Let's look at the output:
+让我们看看输出：
 
 ```
 Starting...
@@ -465,18 +465,18 @@ OnNext returning
 Finished
 ```
 
-The problem is right near the end. Specifically, these two lines:
+问题正是在最后的部分，具体在这两行：
 
 ```
 OnCompleted
 OnNext returning
 ```
 
-This tells us that the call to our observer's `OnCompleted` happened before a call in progress to `OnNext` returned. It didn't take multiple threads to make this occur. It happened because the code in `OnNext` decides whether it wants to keep receiving events, and when it wants to stop, it immediately calls the `GoUntilStopped` object's `Stop` method. There's nothing wrong with that. Observers are allowed to make outbound calls to other objects inside `OnNext`, and it's actually quite common for an observer to inspect an incoming event and decide that it wants to stop.
+这告诉我们调用观察者的 `OnCompleted` 发生在正在进行的 `OnNext` 调用返回之前。这不需要多个线程来发生。它是因为 `OnNext` 中的代码决定它是否想要继续接收事件，并且当它想停止时，它会立即调用 `GoUntilStopped` 对象的 `Stop` 方法。这样做没有错。观察者被允许在 `OnNext` 内对其他对象进行出站调用，实际上观察者在检查传入事件并决定它是否想要停止时这样做是很常见的。
 
-The problem is in the `GoUntilStopped.Stop` method. This calls `OnCompleted` but it makes no attempt to determine whether a call to `OnNext` is in progress.
+问题在于 `GoUntilStopped.Stop` 方法。这个调用 `OnCompleted`，但它没有尝试确定 `OnNext` 是否正在进行。
 
-This can be a surprisingly tricky problem to solve. Suppose `GoUntilStopped` _did_ detect that there was a call in progress to `OnNext`. What then? In the multithreaded case, we could have solved this by using `lock` or some other synchronization primitive to ensure that calls into the observer happened one at at time, but that won't work here: the call to `Stop` has happened on _the same thread_ that called `OnNext`. The call stack will look something like this at the moment where `Stop` has been called and it wants to call `OnCompleted`:
+解决这个问题可能出奇地棘手。假设 `GoUntilStopped` _确实_ 检测到 `OnNext` 正在进行中。那么接下来该怎么办？在多线程的情况下，我们可以使用 `lock` 或其他同步原语来确保按顺序对观察者进行调用，但这在这里行不通：调用 `Stop` 是在调用 `OnNext` 的_同一个线程_ 上进行的。当 `Stop` 被调用并希望调用 `OnCompleted` 时，调用堆栈可能看起来像这样：
 
 ```
 `GoUntilStopped.Go`
@@ -484,83 +484,83 @@ This can be a surprisingly tricky problem to solve. Suppose `GoUntilStopped` _di
     `GoUntilStopped.Stop`
 ```
  
- Our `GoUntilStopped.Stop` method needs to wait for `OnNext` to return before calling `OnCompleted`. But notice that the `OnNext` method can't return until our `Stop` method returns. We've managed to create a deadlock with single-threaded code!
+我们的 `GoUntilStopped.Stop` 方法需要等待 `OnNext` 返回后再调用 `OnCompleted`。但请注意，`OnNext` 方法无法返回，直到我们的 `Stop` 方法返回。我们设法用单线程代码创建了死锁！
 
-In this case it's not all that hard to fix: we could modify `Stop` so it just sets the `running` field to `false`, and then move the call to `OnComplete` into the `Go` method, after the `for` loop. But more generally this can be a hard problem to fix, and it's one of the reasons for using the `System.Reactive` library instead of just attempting to implement `IObservable<T>` and `IObserver<T>` directly. Rx has general purpose mechanisms for solving exactly this kind of problem. (We'll see these when we look at [Scheduling](11_SchedulingAndThreading.md).) Moreover, all of the implementations Rx provides take advantage of these mechanisms for you.
+在这种情况下不难修复：我们可以修改 `Stop`，使其只将 `running` 字段设置为 `false`，然后将对 `OnComplete` 的调用移到 `Go` 方法中，放在 `for` 循环之后。但一般来说，这可能是一个很难解决的问题，这是使用 `System.Reactive` 库而不是尝试直接实现 `IObservable<T>` 和 `IObserver<T>` 的原因之一。Rx 有解决这类问题的通用机制。（我们将在[调度](11_SchedulingAndThreading.md)中看到这些。）此外，Rx 提供的所有实现都利用了这些机制来帮你。
 
-If you're using Rx by composing its built-in operators in a declarative way, you never have to think about these rules. You get to depend on these rules in your callbacks that receive the events, and it's mostly Rx's problem to keep to the rules. So the main effect of these rules is that it makes life simpler for code that consumes events.
+如果你通过声明性地组合内置的操作符使用 Rx，你永远不必考虑这些规则。你可以依赖这些规则在你的回调中接收事件，并且保持规则大部分是 Rx 的问题。所以这些规则的主要影响是它使得消费事件的代码生活变得更简单。
 
-These rules are sometimes expressed as a _grammar_. For example, consider this regular expression:
+这些规则有时被表达为一个_语法_。例如，考虑这个正则表达式：
 
 ```
 (OnNext)*(OnError|OnComplete)
 ```
 
-This formally captures the basic idea: there can be any number of calls to `OnNext` (maybe even zero calls), that occur in sequence, followed by either an `OnError` or an `OnComplete`, but not both, and there must be nothing after either of these.
+这正式捕获了基本思想：可以有任意数量的 `OnNext` 调用（甚至可能是零次调用），这些调用按顺序发生，后面跟着 `OnError` 或 `OnComplete` 中的一个，但不是两者都有，并且这两个之后不得有任何东西。
 
-One last point: sequences may be infinite. This is true for `IEnumerable<T>`. It's perfectly possible for an enumerator to return `true` every time `MoveNext` is returned, in which case a `foreach` loop iterating over it will never reach the end. It might choose to stop (with a `break` or `return`), or some exception that did not originate from the enumerator might cause the loop to terminate, but it's absolutely acceptable for an `IEnumerable<T>` to produce items for as long as you keep asking for them. The same is true of a `IObservable<T>`. If you subscribe to an observable source, and by the time your program exits you've not received a call to either `OnComplete` or `OnError`, that's not a bug.
+最后一点：序列可能是无限的。这对 `IEnumerable<T>` 是真的。完全可以对枚举器每次 `MoveNext` 返回 `true`，在这种情况下，迭代遍历它的 `foreach` 循环将永远不会到达末尾。它可能选择停止（使用 `break` 或 `return`），或者一些非枚举器产生的异常可能导致循环终止，但一个 `IEnumerable<T>` 产生项目只要你继续要求它们是完全可以接受的。`IObservable<T>` 也是如此。如果你订阅了一个可观察源，并且在程序退出时你还没有收到对 `OnComplete` 或 `OnError` 的调用，这不是一个错误。
 
-So you might argue that this is a slightly better way to describe the rules formally:
+因此，你可能会认为这是更好地正式描述规则的方式：
 
 ```
 (OnNext)*(OnError|OnComplete)?
 ```
 
-More subtly, observable sources are allowed to do nothing at all. In fact there's a built-in implementation to save developers from the effort of writing a source that does nothing: if you call `Observable.Never<int>()` it will return an `IObservable<int>`, and if you subscribe to that, it will never call any methods on your observer. This might not look immediately useful—it is logically equivalent to an `IEnumerable<T>` in which the enumerator's `MoveNext` method never returns, which might not be usefully distinguishable from crashing. It's slightly different with Rx, because when we model this "no items emerge ever" behaviour, we don't need to block a thread forever to do it. We can just decide never to call any methods on the observer. This may seem daft, but as you've seen with the `Quiescent` example, sometimes we create observable sources not because we want the actual items that emerge from it, but because we're interested in the instants when interesting things happen. It can sometimes be useful to be able to model "nothing interesting ever happens" cases. For example, if you have written some code to detect unexpected inactivity (e.g., a sensor that stops producing values), and wanted to test that code, your test could use a `Never` source instead of a real one, to simulate a broken sensor.
+更微妙的是，可观察源允许什么都不做。实际上，为了节省开发人员编写不做任何事情的源的努力，提供了一个内置实现：如果你调用 `Observable.Never<int>()`，它将返回一个 `IObservable<int>`，如果你订阅它，它将永远不会调用你的观察者的任何方法。这可能看起来不是立刻有用——它在逻辑上等同于一个 `IEnumerable<T>`，其中枚举器的 `MoveNext` 方法从不返回，这可能无法区分它是否崩溃。与 Rx 不同，因为当我们对这种“永远不会产生任何项”的行为进行建模时，我们不需要永远阻塞一个线程来做到这一点。我们只需要决定永远不调用观察者的任何方法。这可能看起来很傻，但正如你在 `Quiescent` 示例中看到的，有时我们创建可观察源不是因为我们想要实际产生的项，而是因为我们对发生有趣事物的时刻感兴趣。能够对“从不发生有趣事情”案例进行建模有时可能很有用。例如，如果你编写了一些代码来检测意外的不活动（例如，停止产生值的传感器），并希望建立那段代码的测试，你的测试可以使用 `Never` 源而不是真实的一个，来模拟损坏的传感器。
 
-We're not quite done with the Rx's rules, but the last one applies only when we choose to unsubscribe from a source before it comes to a natural end.
+我们还没有完全完成 Rx 的规则，但最后一个规则只适用于我们在自然结束之前选择取消订阅源的情况。
 
-## Subscription Lifetime
+## 订阅的生命周期
 
-There's one more aspect of the relationship between observers and observables to understand: the lifetime of a subscription.
+还有一个需要理解的观察者和可观察者之间关系的方面：订阅的生命周期。
 
-You already know from the rules of `IObserver<T>` that a call to either `OnComplete` or `OnError` denotes the end of a sequence. We passed an `IObserver<T>` to `IObservable<T>.Subscribe`, and now the subscription is over. But what if we want to stop the subscription earlier?
+你已经从 `IObserver<T>` 的规则中了解到，调用 `OnComplete` 或 `OnError` 表示序列的结束。我们将 `IObserver<T>` 传递给了 `IObservable<T>.Subscribe`，现在订阅已经结束了。但如果我们想提前停止订阅怎么办？
 
-I mentioned earlier that the `Subscribe` method returns an `IDisposable`, which enables us to cancel our subscription. Perhaps we only subscribed to a source because our application opened some window showing the status of some process, and we wanted to update the window to reflect that's process's progress. If the user closes that window, we no longer have any use for the notifications. And although we could just ignore all further notifications, that could be a problem if the thing we're monitoring never reaches a natural end. Our observer would continue to receive notifications for the lifetime of the application. This is a waste of CPU power (and thus power consumption, with corresponding implications for battery life and environmental impact) and it can also prevent the garbage collector from reclaiming memory that should have become free.
+我之前提到过 `Subscribe` 方法返回一个 `IDisposable`，它使我们能够取消我们的订阅。也许我们之所以订阅一个源，是因为我们的应用程序打开了一个显示某个进程状态的窗口，我们想根据该进程的进展情况更新窗口。如果用户关闭了这个窗口，我们就不再需要通知了。尽管我们可以忽略所有后续通知，但如果我们监控的东西永远不会自然结束，这可能会成问题。我们的观察者会继续接收通知，直到应用程序的生命周期结束。这是对 CPU 功率（从而对电池寿命和环境影响）的浪费，也可能阻止垃圾收集器回收应该变得自由的内存。
 
-So we are free to indicate that we no longer wish to receive notifications by calling `Dispose` on the object returned by `Subscribe`. There are, however, a few non-obvious details.
+因此，我们可以通过调用 `Subscribe` 返回的对象的 `Dispose` 来表示我们不再希望接收通知。然而，有几个不明显的细节。
 
-### Disposal of Subscriptions is Optional
+### 订阅的处理是可选的
 
-You are not required to call `Dispose` on the object returned by `Subscribe`. Obviously if you want to remain subscribed to events for the lifetime of your process, this makes sense: you never stop using the object, so of course you don't dispose it. But what might be less obvious is that if you subscribe to an `IObservable<T>` that does come to an end, it automatically tidies up after itself.
+你不必在 `Subscribe` 返回的对象上调用 `Dispose`。显然，如果你想在整个过程的生命周期内保持对事件的订阅，这是有意义的：你从未停止使用该对象，因此你当然不会处理它。但可能不那么明显的是，如果你订阅了一个确实结束的 `IObservable<T>`，它会自动进行清理。
 
-`IObservable<T>` implementations are not allowed to assume that you will definitely call `Dispose`, so they are required to perform any necessary cleanup if they stop by calling the observer's `OnCompleted` or `OnError`. This is unusual. In most cases where a .NET API returns a brand new object created on your behalf that implements `IDisposable`, it's an error not to dispose it. But `IDisposable` objects representing Rx subscriptions are an exception to this rule. You only need to dispose them if you want them to stop earlier than they otherwise would.
+`IObservable<T>` 的实现不允许假设你一定会调用 `Dispose`，因此如果它们通过调用观察者的 `OnCompleted` 或 `OnError` 停止，它们需要执行任何必要的清理工作。这很不寻常。在大多数情况下，当一个 .NET API 代表你创建了一个实现了 `IDisposable` 的全新对象时，如果不处理它，那是一个错误。但代表 Rx 订阅的 `IDisposable` 对象是这一规则的一个例外。只有当你想要它们比否则更早地停止时，你才需要处理它们。
 
-### Cancelling Subscriptions may be Slow or Even Ineffectual
+### 取消订阅可能会很慢甚至无效
 
-`Dispose` won't necessarily take effect instantly. Obviously it will take some non-zero amount of time in between your code calling into `Dispose`, and the `Dispose` implementation reaching the point where it actually does something. Less obviously, some observable sources may need to do non-trivial work to shut things down.
+`Dispose` 不一定会立即生效。显然，在你的代码调用 `Dispose` 和 `Dispose` 实现达到实际做些什么的地方之间，会有一段非零的时间。不那么明显的是，一些可观察来源可能需要做一些非平凡的工作来关闭事情。
 
-A source might create a thread to be able to monitor for and report whatever events it represents. (That would happen with the filesystem source shown above when running on Linux on .NET 8, because the `FileSystemWatcher` class itself creates its own thread on Linux.) It might take a while for the thread to detect that it is supposed to shut down.
+一个源可能会创建一个线程来监控并报告它代表的任何事件。（例如，在 .NET 8 上运行 Linux 时，上面显示的文件系统源会创建自己的线程。）关闭线程可能需要一段时间。
 
-It is fairly common practice for an `IObservable<T>` to represent some underlying work. For example, Rx can take any factory method that returns a `Task<T>` and wrap it as an `IObservable<T>`. It will invoke the factory once for each call to `Subscribe`, so if there are multiple subscribers to a single `IObservable<T>` of this kind, each one effectively gets its own `Task<T>`. This wrapper is able to supply the factory with a `CancellationToken`, and if an observer unsubscribes by calling `Dispose` before the task naturally runs to completion, it will put that `CancellationToken` into a cancelled state. This might have the effect of bringing the task to a halt, but that will work only if the task happens to be monitoring the `CancellationToken`. Even if it is, it might take some time to bring things to a complete halt. Crucially, the `Dispose` call doesn't wait for that to happen. It will attempt to initiate cancellation but it may return before cancellation is complete.
+`IObservable<T>` 表示一些底层工作是相当常见的做法。例如，Rx可以将任何返回 `Task<T>` 的工厂方法包装为 `IObservable<T>`。它将为每个调用 `Subscribe` 的调用调用工厂，因此如果一个单一的 `IObservable<T>` 有多个订阅者，每个订阅者实际上都会获得自己的 `Task<T>`。这个包装器能够向工厂提供一个 `CancellationToken`，如果观察者在任务自然运行完成之前取消订阅通过调用 `Dispose`，它将将该 `CancellationToken` 置于已取消状态。这可能会导致任务停止，但这只有在任务恰好在监视 `CancellationToken` 的情况下才行。即使是这样，完全停下来也可能需要一些时间。至关重要的是，`Dispose` 调用不会等待取消完成。它将尝试启动取消，但它可能在取消完成之前返回。
 
-### The Rules of Rx Sequences when Unsubscribing
+### 取消订阅时 Rx 序列的规则
 
-The fundamental rules of Rx sequences described earlier only considered sources that decided when (or whether) to come to a halt. What if a subscriber unsubscribes early? There is only one rule:
+前面描述的 Rx 序列的基本规则仅考虑了源决定何时（或是否）停止的情况。如果订阅者提前取消订阅会怎样？只有一条规则：
 
-Once the call to `Dispose` has returned, the source will make no further calls to the relevant observer. If you call `Dispose` on the object returned by `Subscribe`, then once that call returns you can be certain that the observer you passed in will receive no further calls to any of its three methods (`OnNext`, `OnError`, or `OnComplete`).
+一旦 `Dispose` 调用返回，源将不会对相关观察者进行任何进一步的调用。如果你在 `Subscribe` 返回的对象上调用 `Dispose`，那么一旦该调用返回，你可以确定你传递的观察者将不会再接收其三种方法（`OnNext`、`OnError` 或 `OnComplete`）的任何调用。
 
-That might seem clear enough, but it leaves a grey area: what happens when you've called `Dispose` but it hasn't returned yet? The rules permit sources to continue to emit events in this case. In fact they couldn't very well require otherwise: it will invariably take some non-zero length of time for the `Dispose` implementation to make enough progress to have any effect, so in a multi-threaded world it it's always going to be possible that an event gets delivered in between the call to `Dispose` starting, and the call having any effect. The only situation in which you could depend on no further events emerging would be if your call to `Dispose` happened inside the `OnNext` handler. In this case the source will already have noted a call to `OnNext` is in progress so further calls were already blocked before the call to `Dispose` started.
+这似乎很清楚，但它留下了一个灰色地带：当你已经调用了 `Dispose` 但它还没有返回时会发生什么？规则允许源在这种情况下继续发出事件。事实上，它们很好地要求这样做：`Dispose` 实现需要花费一些非零长度的时间才能产生任何效果，因此在多线程的环境中，总是有可能发生在调用 `Dispose` 开始后的某个时间点，但在调用产生任何效果之前产生事件。唯一可以依赖不会再发出事件的情况是，如果你的观察者没有在 `OnNext` 处理程序内部调用 `Dispose`。在这种情况下，源将已经注意到 `OnNext` 调用正在进行中，因此在调用 `Dispose` 开始之前，进一步的调用已被阻止。
 
-But assuming that your observer wasn't already in the middle of an `OnNext` call, any of the following would be legal:
+但假设你的观察者没有正在进行 `OnNext` 调用，任何以下行为都是合法的：
 
-* stopping calls to `IObserver<T>` almost immediately after `Dispose` begins, even when it takes a relatively long time to bring any relevant underlying processes to a halt, in which case your observer will never receive an `OnCompleted` or `OnError`
-* producing notifications that reflect the process of shutting down (including calling `OnError` if an error occurs while trying to bring things to a neat halt, or `OnCompleted` if it halted without problems)
-* producing a few more notifications for some time after the call to `Dispose` begins, but cutting them off at some arbitrary point, potentially losing track even of important things like errors that occurred while trying to bring things to a halt
+- 几乎在 `Dispose` 开始后立即停止对 `IObserver<T>` 的调用，即使关闭任何相关的底层进程需要相对较长的时间，这种情况下，你的观察者将永远不会接收 `OnCompleted` 或 `OnError`
+- 产生反映关闭过程的通知（包括在尝试整洁地停止时发生错误时调用 `OnError`，或如果它在没有问题的情况下停止则调用 `OnCompleted`）
+- 在调用 `Dispose` 开始后一段时间内继续产生一些通知，但在某个任意时间点切断它们，可能丢失了一些重要的东西，例如在尝试停止时发生的错误
 
-As it happens, Rx has a preference for the first option. If you're using an `IObservable<T>` implemented by the `System.Reactive` library (e.g., one returned by a LINQ operator) it is highly likely to have this characteristic. This is partly to avoid tricky situations in which observers try to do things to their sources inside their notification callbacks. Re-entrancy tends to be awkward to deal with, and Rx avoids ever having to deal with this particular form of re-entrancy by ensuring that it has already stopped delivering notifications to the observer before it begins the work of shutting down a subscription.
+事实上，Rx 倾向于选择第一个选项。如果你正在使用由 `System.Reactive` 库实现的 `IObservable<T>`（例如，通过 LINQ 操作符返回的一个），它很有可能有这种特性。这部分是为了避免观察者在其通知回调中尝试对其源进行操作的棘手情况。重入往往难以处理，Rx 通过确保在开始关闭订阅的工作之前已经停止向观察者传递通知来避免处理这种特定形式的重入。
 
-This sometimes catches people out. If you need to be able to cancel some process that you are observing but you need to be able to observe everything it does up until the point that it stops, then you can't use unsubscription as the shutdown mechanism. As soon as you've called `Dispose`, the `IObservable<T>` that returned that `IDisposable` is no longer under any obligation to tell you anything. This can be frustrating, because the `IDisposable` returned by `Subscribe` can sometimes seem like such a natural and easy way to shut something down. But basic truth is this: once you've initiated unsubscription, you can't rely on getting any further notifications associated with that subscription. You _might_ receive some—the source is allowed to carry on supplying items until the call to `Dispose` returns. But you can't rely on it—the source is also allowed to silence itself immediately, and that's what most Rx-implemented sources will do.
+有时这会让人措手不及。如果你需要能够取消你正在观察的一些过程，但你需要能够观察到它停止之前的一切，那么你不能使用取消订阅作为关闭机制。一旦你调用了 `Dispose`，返回 `IDisposable` 的 `IObservable<T>` 就不再有义务告诉你任何事情了。这可能很令人沮丧，因为 `Subscribe` 返回的 `IDisposable` 有时看起来是如此自然且易于关闭某事的方式。但基本事实是：一旦你开始取消订阅，你就不能依赖于获取与该订阅关联的任何进一步的通知。你_可能_会收到一些——源被允许在 `Dispose` 调用返回之前继续提供项目。但你不能依赖它——源也被允许立即沉默，这是大多数由 Rx 实现的源会做的事情。
 
-One subtle consequence of this is that if an observable source reports an error after a subscriber has unsubscribed, that error might be lost. A source might call `OnError` on its observer, but if that's a wrapper provided by Rx relating to a subscription that has already been disposed, it just ignores the exception. So it's best to think of early unsubscription as inherently messy, a bit like aborting a thread: it can be done but information can be lost, and there are race conditions that will disrupt normal exception handling.
+一种微妙的后果是，如果订阅者在源报告错误后取消订阅，这个错误可能会丢失。源可能会在其观察者上调用 `OnError`，但如果是 Rx 提供的包装器并且与已经处置的订阅相关，它只是忽略了异常。所以最好将提前取消订阅视为本质上是混乱的，有点像中止一个线程：它可以做到，但信息可能会丢失，并且会出现破坏正常异常处理的竞争条件。
 
-In short, if you unsubscribe, then a source is not obliged to tell you when things stop, and in most cases it definitely won't tell you.
+简而言之，如果你取消订阅，那么源就没有义务告诉你事情何时停止，在大多数情况下它肯定不会告诉你。
 
-### Subscription Lifetime and Composition
+### 订阅生命周期和组合
 
-We typically combine multiple LINQ operators to express our processing requirements in Rx. What does this mean for subscription lifetime?
+我们通常结合多个 LINQ 操作符来表达我们在 Rx 中的处理需求。这对订阅生命周期意味着什么？
 
-For example, consider this:
+例如，考虑这个：
 
 ```csharp
 IObservable<int> source = GetSource();
@@ -571,14 +571,14 @@ IDisposable subscription = filtered.Subscribe(
     () => Console.WriteLine("OnCompleted"));
 ```
 
-We're calling `Subscribe` on the observable returned by `Where`. When we do that, it will in turn call `Subscribe` on the `IObservable<int>` returned by `GetSource` (stored in the `source` variable). So there is in effect a chain of subscriptions here. (We only have access to the `IDisposable` returned by `filtered.Subscribe` but the object that returns will be storing the `IDisposable` that it received when it called `source.Subscribe`.)
+我们在由 `Where` 返回的可观测对象上调用 `Subscribe`。当我们这样做时，它反过来会在我们为其调用 `source.Subscribe`（存储在 `source` 变量中）时调用 `Subscribe`。因此这里实际上有一条订阅链。（我们只能访问由 `filtered.Subscribe` 返回的 `IDisposable`，但返回的对象将存储它在调用 `source.Subscribe` 时接收到的 `IDisposable`。）
 
-If the source comes to an end all by itself (by calling either `OnCompleted` or `OnError`), this cascades through the chain. So `source` will call `OnCompleted` on the `IObserver<int>` that was supplied by the `Where` operator. And that in turn will call `OnCompleted` on the `IObserver<int>` that was passed to `filtered.Subscribe`, and that will have references to the three methods we passed, so it will call our completion handler. So you could look at this by saying that `source` completes, it tells `filtered` that it has completed, which invokes our completion handler. (In reality this is a very slight oversimplification, because `source` doesn't tell `filtered` anything; it's actually talking to the `IObserver<T>` that `filtered` supplied. This distinction matters if you have multiple subscriptions active simultaneously for the same chain of observables. But in this case, the simpler way of describing it is good enough even if it's not absolutely precise.)
+如果源自行结束（通过调用 `OnCompleted` 或 `OnError`），这将通过链上传递。因此，`source` 将在 `Where` 操作符提供的 `IObserver<int>` 上调用 `OnCompleted`。而后者反过来将在传递给 `filtered.Subscribe` 的 `IObserver<int>` 上调用 `OnCompleted`，而这将引用我们传递的三个方法中的一个，因此它将调用我们的完成处理程序。因此，你可以说 `source` 完成了，它告诉 `filtered` 它已完成，这触发了我们的完成处理程序。 （实际上这是一个非常轻微的简化，因为 `source` 实际上没有告诉 `filtered` 任何事情；它实际上是在与 `filtered` 提供的 `IObserver<T>` 交谈。如果你同时激活了相同的一系列可观测对象的多个订阅，这种区别很重要。但在这种情况下，更简单的描述方法已经足够好，即使它不是绝对精确。）
 
-In short, completion bubbles up from the source, through all the operators, and arrives at our handler.
+简而言之，完成从源冒泡到观察者，穿过所有的操作符，并到达我们的处理程序。
 
-What if we unsubscribe early by calling `subscription.Dispose()`? In that case it all happens the other way round. The `subscription` returned by `filtered.Subscribe` is the first to know that we're unsubscribing, but it will then call `Dispose` on the object that was returned when it called `source.Subscribe` for us.
+如果我们通过调用 `subscription.Dispose()` 提前取消订阅会怎样呢？在这种情况下，一切都是相反的。由 `filtered.Subscribe` 返回的 `subscription` 是第一个知道我们正在取消订阅的，但它随后将调用它在为我们调用 `source.Subscribe` 时收到的对象的 `Dispose`。
 
-Either way, everything from the source to the observer, including any operators that were sitting in between, gets shut down.
+无论哪种方式，从源到观察者，包括在两者之间的任何操作符，都会被关闭。
 
-Now that we understand the relationship between an `IObservable<T>` source and the `IObserver<T>` interface that received event notifications, we can look at how we might create an `IObservable<T>` instance to represent events of interest in our application.
+现在我们理解了 `IObservable<T>` 源与接收事件通知的 `IObserver<T>` 接口之间的关系，我们可以看看如何创建一个 `IObservable<T>` 实例来表示我们应用程序中的感兴趣事件。
