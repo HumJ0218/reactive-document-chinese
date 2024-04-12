@@ -1,20 +1,20 @@
-# Scheduling and Threading
+# 调度和线程
 
-Rx is primarily a system for working with _data in motion_ asynchronously. If we are dealing with multiple information sources, they may well generate data concurrently. We may want some degree of parallelism when processing data to achieve our scalability targets. We will need control over these aspects of our system.
+Rx 主要是一个用于异步处理_运动中的数据_的系统。如果我们处理多个信息源，这些源可能会同时生成数据。在处理数据时，我们可能希望某种程度的并行性，以达到我们的可扩展性目标。因此，我们需要控制系统的这些方面。
 
-So far, we have managed to avoid any explicit usage of threading or concurrency. We have seen some methods that must deal with timing to perform their jobs. (For example, `Buffer`, `Delay`, and `Sample` must arrange for work to happen on a particular schedule.) However, we have relied on the default behaviour, and although the defaults often do what we want, we sometimes need to exercise more control. This chapter will look at Rx's scheduling system, which offers an elegant way to manage these concerns.
+到目前为止，我们已经设法避免了任何明确使用线程或并发。我们已经看到了一些必须处理时序以完成工作的方法。（例如，`Buffer`、`Delay` 和 `Sample` 需要安排在特定的计划上工作。）然而，我们依赖于默认行为，虽然默认值通常能完成我们想要的操作，但有时我们需要更多的控制。这一章将探讨 Rx 的调度系统，它提供了一种优雅的方式来管理这些问题。
 
-## Rx, Threads and Concurrency
+## Rx、线程和并发
 
-Rx does not impose constraints on which threads we use. An `IObservable<T>` is free to invoke its subscribers' `OnNext/Completed/Error` methods on any thread, perhaps a different thread for each call. Despite this free-for-all, there is one aspect of Rx that prevents chaos: observable sources must obey the [Fundamental Rules of Rx Sequences](02_KeyTypes.md#the-fundamental-rules-of-rx-sequences) under all circumstances.
+Rx 不限制我们使用哪些线程。一个 `IObservable<T>` 可以自由地在任何线程上调用它的订阅者的 `OnNext/Completed/Error` 方法，可能每次调用都在不同的线程上。尽管这样，Rx 有一个方面可以阻止混乱：可观察源必须在所有情况下遵守[Rx 序列的基本规则](02_KeyTypes.md#the-fundamental-rules-of-rx-sequences)。
 
-When we first explored these rules, we focused on how they determine the ordering of calls into any single observer. There can be any number of calls to `OnNext`, but once either `OnError` or `OnCompleted` have been invoked, there must be no further calls. But now that we're looking at concurrency, a different aspect of these rules becomes more important: for any single subscription, an observable source must not make concurrent calls into that subscription's observer. So if a source calls `OnNext`, it must wait until that call returns before either calling `OnNext` again, or calling `OnError` or `OnComplete`.
+当我们第一次探索这些规则时，我们关注的是它们如何确定对任何单个观察者的调用顺序。可以进行任意数量的 `OnNext` 调用，但一旦调用了 `OnError` 或 `OnCompleted`，就不能再有更多的调用。但现在我们看到并发，这些规则的另一个方面变得更重要：对于任何单一订阅，可观察源不得对该订阅的观察者进行并发调用。所以如果源调用了 `OnNext`，它必须等到该调用返回后才能再次调用 `OnNext` 或调用 `OnError` 或 `OnComplete`。
 
-The upshot for observers is that as long as your observer is involved in just one subscription, it will only ever be asked to deal with one thing at a time. It doesn't matter if the source to which it is subscribed is a long and complex processing chain involving many different operators. Even if you build that source by combining multiple inputs (e.g., using [`Merge`](09_CombiningSequences.md#merge)), the fundamental rules require that if you called `Subscribe` just once on a single `IObservable<T>`, that source is never allowed to make multiple concurrent calls into your `IObserver<T>` methods.
+对于观察者来说，好处是只要你的观察者只涉及一次订阅，它将永远只需要一次处理一件事。无论它订阅的源是否是一个涉及许多不同操作符的长而复杂的处理链。即使您通过组合多个输入来构建该源（例如，使用 [`Merge`](09_CombiningSequences.md#merge)），基本规则要求，如果你只在一个 `IObservable<T>` 上调用了 `Subscribe` 一次，那么源永远不允许对你的 `IObserver<T>` 方法进行多个并发调用。
 
-So although each call might come in on a different thread, the calls are strictly sequential (unless a single observer is involved in multiple subscriptions).
+所以虽然每次调用可能在不同的线程上进行，这些调用是严格按顺序进行的（除非单个观察者涉及多个订阅）。
 
-Rx operators that receive incoming notifications as well as producing them will notify their observers on whatever thread the incoming notification happened to arrive on. Suppose you have a sequence of operators like this:
+接收传入通知并产生通知的 Rx 操作符将在收到传入通知的线程上通知它们的观察者。假设你有一系列的操作符，如下所示：
 
 ```csharp
 source
@@ -24,25 +24,25 @@ source
     .Subscribe(x => Console.WriteLine(x));
 ```
 
-When that call to `Subscribe` happens, we end up with a chain of observers. The Rx-supplied observer that will invoke our callback was passed to the observable returned by `Take`, which will in turn create an observer that subscribed to the observable returned by `Buffer`, which will in turn create an observer subscribed to the `Where` observable, which will have created yet another observer which is subscribed to `source`.
+当调用 `Subscribe` 时，我们就得到了一连串的观察者。传递给 `Take` 返回的可观察对象的 Rx 提供的观察者将依次创建一个订阅到 `Buffer` 返回的可观察对象的观察者，然后又会创建一个订阅到 `Where` 可观察对象的观察者，而 `Where` 又创建了订阅到 `source` 的另一个观察者。
 
-So when `source` decides to produce an item, it will invoke the `Where` operator's observer's `OnNext`. That will invoke the predicate, and if the `MessageType` is indeed 3, the `Where` observer will call `OnNext` on the `Buffer`'s observer, and it will do this on the same thread. The `Where` observer's `OnNext` isn't going to return until the `Buffer` observer's `OnNext` returns. Now if the `Buffer` observer determines that it has completely filled a buffer (e.g., it just received its 10th item), then it is also not going to return yet—it's going to invoke the `Take` observer's `OnNext`, and as long as `Take` hasn't already received 20 buffers, it's going to call `OnNext` on the Rx-supplied observer that will invoke our callback.
+因此，当 `source` 决定生成一个项时，它会调用 `Where` 操作符的观察者的 `OnNext`。这将调用谓词，如果 `MessageType` 确实是 3，`Where` 观察者将在同一线程上调用 `Buffer` 观察者的 `OnNext`。`Where` 观察者的 `OnNext` 不会返回，直到 `Buffer` 观察者的 `OnNext` 返回。现在，如果 `Buffer` 观察者确定它已经完全填充了一个缓冲区（例如，它刚刚收到了第 10 个项），那么它还不会返回——它将调用 `Take` 观察者的 `OnNext`，只要 `Take` 还没有收到 20 个缓冲区，它将调用 Rx 提供的将调用我们回调的观察者的 `OnNext`。
 
-So for the source notifications that make it all the way through to that `Console.WriteLine` in the callback passed to subscribe, we end up with a lot of nested calls on the stack:
+因此，对于所有成功到达 `Console.WriteLine` 的源通知，在订阅中传递的回调都会在堆栈上有很多嵌套的调用：
 
 ```
-`source` calls:
-  `Where` observer, which calls:
-    `Buffer` observer, which calls:
-      `Take` observer, which calls:
-        `Subscribe` observer, which calls our lambda
+`source` 调用：
+  `Where` 观察者，它调用：
+    `Buffer` 观察者，它调用：
+      `Take` 观察者，它调用：
+        `Subscribe` 观察者，它调用我们的 lambda
 ```
 
-This is all happening on one thread. Most Rx operators don't have any one particular thread that they call home. They just do their work on whatever thread the call comes in on. This makes Rx pretty efficient. Passing data from one operator to the next merely involves a method call, and those are pretty fast. (In fact, there are typically a few more layers. Rx tends to add a few wrappers to handle errors and early unsubscription. So the call stack will look a bit more complex than what I've just shown. But it's still typically all just method calls.)
+这一切都发生在一个线程上。大多数 Rx 操作符都没有任何特定的线程归属。它们只是在调用来自的任何线程上完成任务。这使得 Rx 相当高效。从一个操作符传递数据到下一个操作符只涉及一个方法调用，这些调用相当快。（事实上，通常还有更多层。Rx 倾向于添加一些包装来处理错误和提前取消订阅。所以调用栈会比我刚展示的复杂一些。但它通常还是只是方法调用。）
 
-You will sometimes hear Rx described as having a _free threaded_ model. All that means is that operators don't generally care what thread they use. As we will see, there are exceptions, but this direct calling by one operator of the next is the norm.
+有时你会听到 Rx 被描述为有一个_自由线程_模型。这仅仅意味着操作符通常不关心它们使用哪个线程。正如我们将看到的，有例外，但这种由一个操作符直接调用下一个操作符是常规做法。
 
-An upshot of this is that it's typically the original source that determines which thread is used. This next example illustrates this by creating a subject, then calling `OnNext` on various threads and reporting the thread id.
+这的其中一个好处是，通常是原始源决定使用哪个线程。下面这个例子通过创建一个主题，然后在各种线程上调用 `OnNext` 并报告线程 id 来说明这一点：
 
 ```csharp
 Console.WriteLine($"Main thread: {Environment.CurrentManagedThreadId}");
@@ -68,7 +68,7 @@ new Thread(notify).Start("First worker thread");
 new Thread(notify).Start("Second worker thread");
 ```
 
-Output:
+输出：
 
 ```
 Main thread: 1
@@ -80,11 +80,11 @@ OnNext(Second worker thread) on thread: 11
 Received Second worker thread on thread: 11
 ```
 
-In each case, the handler passed to `Subscribe` was called back on the same thread that made the call to `subject.OnNext`. This is straightforward and efficient. However, things are not always this simple.
+在每个案例中，传递给 `Subscribe` 的处理器都在发出 `subject.OnNext` 调用的同一线程上被调用。这种方式简单且高效。然而，事情并不总是这么简单。
 
-## Timed invocation
+## 定时调用
 
-Some notifications will not be the immediate result of a source providing an item. For example, Rx offers a [`Delay`](12_Timing.md#delay) operator, which time shifts the delivery of items. This next example is based on the preceding one, with the main difference being that we no longer subscribe directly to the source. We go via `Delay`:
+某些通知不会是源提供项的直接结果。例如，Rx 提供了一个 [`Delay`](12_Timing.md#delay) 操作符，它会延迟项的交付。以下例子基于前面的例子，主要区别在于我们不再直接订阅源。我们通过 `Delay` 进行订阅：
 
 ```csharp
 Console.WriteLine($"Main thread: {Environment.CurrentManagedThreadId}");
@@ -119,7 +119,7 @@ new Thread(notify).Start("Second worker thread");
 Thread.Sleep(TimeSpan.FromSeconds(2));
 ```
 
-This also waits for a while between sending source items, so we can see the effect of `Delay`. Here's the output:
+这也在发送源项之间等待了一段时间，所以我们可以看到 `Delay` 的效果。这是输出：
 
 ```
 Main thread: 1
@@ -135,19 +135,19 @@ Received First worker thread on thread: 12
 Received Second worker thread on thread: 12
 ```
 
-Notice that in this case every `Received` message is on thread id 12, which is different from any of the three threads on which the notifications were raised.
+注意，在这种情况下，每条 `Received` 消息都在线程 id 12 上，这与发出通知的任何三个线程都不同。
 
-This shouldn't be entirely surprising. The only way Rx could have used the original thread here would be for `Delay` to block the thread for the specified time (a quarter of a second here) before forwarding the call. This would be unacceptable for most scenarios, so instead, the `Delay` operator arranges for a callback to occur after a suitable delay. As you can see from the output, these all seems to happen on one particular thread. No matter which thread calls `OnNext`, the delayed notification arrives on thread id 12. But this is not a thread created by the `Delay` operator. This is happening because `Delay` is using a _scheduler_.
+这不应该完全令人惊讶。Rx 在这里使用原始线程的唯一方法是 `Delay` 阻塞线程指定的时间（这里是四分之一秒）然后再转发调用。这对于大多数场景来说是不可接受的，所以 `Delay` 操作符安排在适当的延迟后进行回调。正如您从输出中看到的，这似乎都发生在一个特定的线程上。不管哪个线程调用了 `OnNext`，延迟通知都会在线程 id 12 上到达。但这不是 `Delay` 操作符创建的线程。这是因为 `Delay` 使用了一个_调度器_。
 
-## Schedulers
+## 调度器
 
-Schedulers do three things:
+调度器主要有三项功能：
 
-* determining the context in which to execute work (e.g., a certain thread)
-* deciding when to execute work (e.g., immediately, or deferred)
-* keeping track of time
+* 确定执行工作的上下文（例如，某个特定线程）
+* 决定何时执行工作（例如，立即执行或延迟执行）
+* 跟踪时间
 
-Here's a simple example to explore the first two of those:
+以下是一个简单的例子，用来探索这些功能的前两项：
 
 ```csharp
 Console.WriteLine($"Main thread: {Environment.CurrentManagedThreadId}");
@@ -162,7 +162,7 @@ Console.WriteLine("Subscribe returned");
 Console.ReadLine();
 ```
 
-It might not be obvious that this has anything to do with scheduling, but in fact, `Range` always uses a scheduler to do its work. We've just let it use its default scheduler. Here's the output:
+这可能看起来与调度没有什么关系，但事实上，`Range` 总是使用调度器来完成工作。我们只是让它使用了它的默认调度器。这是输出结果：
 
 ```
 Main thread: 1
@@ -174,7 +174,7 @@ Received 5 on thread: 1
 Subscribe returned
 ```
 
-Looking at the first two items in our list of what schedulers do, we can see that the context in which this has executed the work is the thread on which I called `Subscribe`. And as for when it has decided to execute the work, it has decided to do it all before `Subscribe` returns. So you might think that `Range` immediately produces all of the items we've asked for and then returns. However, it's not quite as simple as that. Let's look at what happens if we have multiple `Range` instances running simultaneously. This introduces an extra operator: a `SelectMany` that calls `Range` again:
+从我们列出的调度器要做的前两项任务中，我们可以看到这项工作执行的上下文是我调用 `Subscribe` 的线程。至于它决定何时执行工作，它决定在 `Subscribe` 返回之前立即完成所有工作。所以你可能会认为 `Range` 立即产生了我们请求的所有项，然后才返回。然而，这并不像看起来那么简单。我们来看看如果我们同时运行多个 `Range` 实例会发生什么。这引入了一个额外的操作符：一个调用 `Range` 的 `SelectMany`：
 
 ```csharp
 Observable
@@ -185,7 +185,7 @@ Observable
         $"Received {m} on thread: {Environment.CurrentManagedThreadId}"));
 ```
 
-The output shows that `Range` doesn't in fact necessarily produce all of its items immediately:
+输出结果显示，`Range` 实际上并不一定立即产生它的所有项：
 
 ```
 Received 10 on thread: 1
@@ -216,7 +216,7 @@ Received 54 on thread: 1
 Subscribe returned
 ```
 
-The first nested `Range` produces by the `SelectMany` callback produces a couple of values (10 and 11) but then the second one manages to get its first value out (20) before the first one produces its third (12). You can see there's some interleaving of progress here. So although the context in which work is executed continues to be the thread on which we invoked `Subscribe`, the second choice the scheduler has to make—when to execute the work—is more subtle than it first seems. This tells us that `Range` is not as simple as this naive implementation:
+第一个嵌套的 `Range` 由 `SelectMany` 回调生成了一些值（10 和 11），但然后第二个才开始输出它的第一个值（20），在第一个生成第三个值（12）之前。你可以看到这里有一些交错的进展。所以尽管工作执行的上下文仍然是我们调用 `Subscribe` 的那个线程，调度器做出的第二个选择——何时执行工作——比最初看起来的要微妙。这告诉我们，`Range` 并不像这种幼稚实现那么简单：
 
 ```csharp
 public static IObservable<int> NaiveRange(int start, int count)
@@ -233,7 +233,7 @@ public static IObservable<int> NaiveRange(int start, int count)
 }
 ```
 
-If `Range` worked like that, this code would produce all of the items from the first range returned by the `SelectMany` callback before moving on to the next. In fact, Rx does provide a scheduler that would give us that behaviour if that's what we want. This example passes `ImmediateScheduler.Instance` to the nested `Observable.Range` call:
+如果 `Range` 就像这样工作，这段代码将产生第一个由 `SelectMany` 回调返回的 `Range` 的所有项，然后再继续到下一个。实际上，Rx 确实提供了一个调度器，如果这是我们想要的，它就会给我们这种行为。这个例子将 `ImmediateScheduler.Instance` 传递给嵌套的 `Observable.Range` 调用：
 
 ```csharp
 Observable
@@ -243,7 +243,7 @@ Observable
     m => Console.WriteLine($"Received {m} on thread: {Environment.CurrentManagedThreadId}"));
 ```
 
-Here's the outcome:
+这是结果：
 
 ```
 Received 10 on thread: 1
@@ -274,11 +274,11 @@ Received 54 on thread: 1
 Subscribe returned
 ```
 
-By specifying `ImmediateScheduler.Instance` in the innermost call to `Observable.Range` we've asked for a particular policy: this invokes all work on the caller's thread, and it always does so immediately. There are a couple of reasons this is not `Range`'s default. (Its default is `Scheduler.CurrentThread`, which always returns an instance of `CurrentThreadScheduler`.) First, `ImmediateScheduler.Instance` can end up causing fairly deep call stacks. Most of the other schedulers maintain work queues, so if one operator decides it has new work to do while another is in the middle of doing something (e.g., a nested `Range` operator decides to start emitting its values), instead of starting that work immediately (which will involve invoking the method that will do the work) that work can be put on a queue instead, enabling the work already in progress to finish before starting on the next thing. Using the immediate scheduler everywhere can cause stack overflows when queries become complex. The second reason `Range` does not use the immediate scheduler by default is so that when multiple observables are all active at once, they can all make some progress—`Range` produces all of its items as quickly as it can, so it could end up starving other operators of CPU time if it didn't use a scheduler that enabled operators to take it in turns.
+通过在最内层调用 `Observable.Range` 时指定 `ImmediateScheduler.Instance`，我们请求了一个特定的策略：这会在调用者的线程上调用所有工作，并且总是立即这样做。这并不是 `Range` 的默认行为的几个原因之一。（其默认值是 `Scheduler.CurrentThread`，始终返回 `CurrentThreadScheduler` 的实例。）首先，`ImmediateScheduler.Instance` 可能导致相当深的调用堆栈。大多数其他调度器维护工作队列，因此如果某个操作符决定在另一个进行中做某些新的工作（例如，嵌套的 `Range` 操作符决定开始发射它的值），而不是立即开始该工作（这将涉及调用将执行工作的方法），那么该工作可以被放在队列中，使正在进行的工作先完成再开始下一件事。如果到处使用即时调度器，当查询变得复杂时可能导致栈溢出。第二个原因是 `Range` 未默认使用即时调度器的目的，是为了在多个可观察对象同时活跃时，它们都能取得一些进展——`Range` 会尽可能快地产生它的所有项，所以如果它不使用一个使操作符轮流进行的调度器，它可能会耗尽其他操作符的 CPU 时间。
 
-Notice that the `Subscribe returned` message appears last in both examples. So although the `CurrentThreadScheduler` isn't quite as eager as the immediate scheduler, it still won't return to its caller until it has completed all outstanding work. It maintains a work queue, enabling slightly more fairness, and avoiding stack overflows, but as soon as anything asks the `CurrentThreadScheduler` to do something, it won't return until it has drained its queue.
+注意，在两个例子中，“Subscribe returned” 消息都是最后出现的。所以尽管 `CurrentThreadScheduler` 并不像即时调度器那样急切，它仍然不会在完成所有未完成的工作之前返回给它的调用者。它维护一个工作队列，使公平性稍微提高一些，并避免栈溢出，但只要有人要求 `CurrentThreadScheduler` 做某事，它不会返回直到它排空了队列。
 
-Not all schedulers have this characteristic. Here's a variation on the earlier example in which we have just a single call to `Range`, without any nested observables. This time I'm asking it to use the `TaskPoolScheduler`.
+并不是所有的调度器都具备这个特点。这是早期示例的一个变体，我们只调用了一次 `Range`，没有嵌套的可观察对象。这次我要求它使用 `TaskPoolScheduler`。
 
 ```csharp
 Observable
@@ -287,7 +287,7 @@ Observable
     m => Console.WriteLine($"Received {m} on thread: {Environment.CurrentManagedThreadId}"));
 ```
 
-This makes a different decision about the context in which to run work, compared to the immediate and current thread schedulers, as we can see from its output:
+这对于决定运行工作的上下文做出了不同的决定，比起即刻和当前线程的调度器，我们可以从它的输出中看出：
 
 ```
 Main thread: 1
@@ -299,11 +299,11 @@ Received 4 on thread: 12
 Received 5 on thread: 12
 ```
 
-Notice that the notifications all happened on a different thread (with id 12) than the thread on which we invoked `Subscribe` (id 1). That's because the `TaskPoolScheduler`'s defining feature is that it invokes all work through the Task Parallel Library's (TPL) task pool. That's why we see a different thread id: the task pool doesn't own our application's main thread. In this case, it hasn't seen any need to spin up multiple threads. That's reasonable, there's just a single source here providing item one at a time. It's good that we didn't get more threads in this case—the thread pool is at its most efficient when a single thread processes work items sequentially, because it avoids context switching overheads, and since there's no actual scope for concurrent work here, we would gain nothing if it had created multiple threads in this case.
+注意，通知都发生在与我们调用 `Subscribe` 的线程（id 1）不同的线程（id 12）上。这是因为 `TaskPoolScheduler` 的定义特性是通过任务并行库（TPL）的任务池调用所有工作。这就是我们看到不同线程 id 的原因：任务池并不拥有我们应用程序的主线程。在这种情况下，它没有看到有必要启动多个线程。这是合理的，这里只有一个来源依次提供一个项目。我们这种情况下没有得到更多线程是好事——线程池在单个线程依次处理工作项时最有效，因为它避免了上下文切换的开销，并且由于这里实际上没有并行工作的范围，如果它创建了多个线程，我们将一无所获。
 
-There's one other very significant difference with this scheduler: notice that the call to `Subscribe` returned before _any_ of the notifications reached our observer. That's because this is the first scheduler we've looked at that will introduce real parallelism. The `ImmediateScheduler` and `CurrentThreadScheduler` will never spin up new threads by themselves, no matter how much the operators executing might want to perform concurrent operations. And although the `TaskPoolScheduler` determined that there's no need for it to create multiple threads, the one thread it did create is a different thread from the application's main thread, meaning that the main thread can continue to run in parallel with this subscription. Since `TaskPoolScheduler` isn't going to do any work on the thread that initiated the work, it can return as soon as it has queued the work up, enabling the `Subscribe` method to return immediately.
+这个调度器还有一个非常重要的不同之处：请注意，调用 `Subscribe` 的返回在任何通知到达我们的观察者之前。这是因为这是我们看到的第一个确实引入实际并行性的调度器。`ImmediateScheduler` 和 `CurrentThreadScheduler` 从不会自己启动新线程，无论执行的操作符可能希望执行多少并发操作。而尽管 `TaskPoolScheduler` 认为没有必要创建多个线程，它创建的一个线程与应用程序的主线程不同，这意味着主线程可以与此订阅并行运行。由于 `TaskPoolScheduler` 不会在启动工作的线程上做任何工作，它可以在将工作排队后立即返回，使 `Subscribe` 方法能够立即返回。
 
-What if we use the `TaskPoolScheduler` in the example with nested observables? This uses it just on the inner call to `Range`, so the outer one will still use the default `CurrentThreadScheduler`:
+如果我们在嵌套的可观察对象的示例中使用 `TaskPoolScheduler` 会怎样？这只在对 `Range` 的内部调用中使用它，所以外部的一个仍然会使用默认的 `CurrentThreadScheduler`：
 
 ```csharp
 Observable
@@ -313,7 +313,7 @@ Observable
     m => Console.WriteLine($"Received {m} on thread: {Environment.CurrentManagedThreadId}"));
 ```
 
-Now we can see a few more threads getting involved:
+现在我们可以看到涉及更多线程：
 
 ```
 Received 10 on thread: 13
@@ -344,9 +344,9 @@ Received 33 on thread: 15
 Received 34 on thread: 15
 ```
 
-Since we have only a single observer in this example, the rules of Rx require it to be given items one at a time, so in practice there wasn't really any scope for parallelism here, but the more complex structure would have resulted in more work items initially going into the scheduler's queue than in the preceding example, which is probably why the work got picked up by more than one thread this time. In practice most of these threads would have spent most of their time blocked in the code inside `SelectMany` that ensures that it delivers one item at a time to its target observer. It's perhaps a little surprising that the items are not more scrambled. The subranges themselves seem to have emerged in a random order, but it has almost produced the items sequentially within each subrange (with item 14 being the one exception to that). This is a quirk relating to the way in which `Range` interacts with the `TaskPoolScheduler`.
+由于我们在这个示例中只有一个观察者，Rx 的规则要求一次给出一个项目，所以实际上这里真的没有并行性的范围，但更复杂的结构会导致最初进入调度器队列的工作项比前面的示例更多，这可能是为什么这次的工作被多个线程接手。实际上，这些线程中的大多数可能会在 `SelectMany` 内部的代码中阻塞，确保它每次向目标观察者提供一个项目。项目的顺序有点令人惊讶没有更多的混乱。子范围本身似乎是随机出现的，但它几乎是按顺序产生项目的（项目 14 是唯一的例外）。这与 `Range` 如何与 `TaskPoolScheduler` 互动的一个怪癖有关。
 
-I've not yet talked about the scheduler's third job: keeping track of time. This doesn't arise with `Range` because it attempts to produce all of its items as quickly as it can. But for the `Delay` operator I showed in the [Timed Invocation](#timed-invocation) section, timing is obviously a critical element. In fact this would be a good point to show the API that schedulers offer:
+我还没有讨论调度器的第三项工作：跟踪时间。这与 `Range` 无关，因为它试图尽可能快地产生所有的项目。但对于我在[定时调用](#timed-invocation)部分中展示的 `Delay` 操作符，时间显然是一个关键元素。实际上，这将是展示调度器提供的 API 的一个很好的时机：
 
 ```csharp
 public interface IScheduler
@@ -366,33 +366,33 @@ public interface IScheduler
 }
 ```
 
-You can see that all but one of these is concerned with timing. Only the first `Schedule` overload is not, and operators call that when they want to schedule work to run as soon as the scheduler will allow. That's the overload used by `Range`. (Strictly speaking, `Range` interrogates the scheduler to find out whether it supports long-running operations, in which an operator can take temporary control of a thread for an extended period. It prefers to use that when it can because it tends to be more efficient than submitting work to the scheduler for every single item it wishes to produce. The `TaskPoolScheduler` does support long running operations, which explains the slightly surprising output we saw earlier, but the `CurrentThreadScheduler`, `Range`'s default choice, does not. So by default, `Range` will invoke that first `Schedule` overload once for each item it wishes to produce.)
+你可以看到，这些中只有一个与时间有关。只有第一个 `Schedule` 重载不是，当操作符希望建议工作尽可能快地运行时，会调用那个。这是 `Range` 使用的重载。（严格来说，`Range` 会询问调度器是否支持长时间运行的操作，在这种操作中，操作符可以暂时控制一个线程较长时间。它更喜欢在可能的情况下使用这种方式，因为它往往比为每个单独项目提交工作给调度器更有效。`TaskPoolScheduler` 支持长时间运行的操作，这解释了我们之前看到的略有意外的输出，但 `CurrentThreadScheduler`（`Range` 的默认选择）则不支持。所以默认情况下，`Range` 将调用第一个 `Schedule` 重载来为它希望产生的每个项目安排一次。）
 
-`Delay` uses the second overload. The exact implementation is quite complex (mainly because of how it catches up efficiently when a busy source causes it to fall behind) but in essence, each time a new item arrives into the `Delay` operator, it schedules a work item to run after the configured delay, so that it can supply that item to its subscriber with the expected time shift.
+`Delay` 使用第二个重载。具体实现相当复杂（主要是因为它如何在繁忙的来源导致其落后时有效地赶上），但本质上，每次新的项目进入 `Delay` 操作符时，它都会安排一个工作项在配置的延迟后运行，以便可以在预期的时间偏移后将该项目提供给其订阅者。
 
-Schedulers have to be responsible for managing time, because .NET has several different timer mechanisms, and the choice of timer is often determined by the context in which you want to handle a timer callback. Since schedulers determine the context in which work runs, that means they must also choose the timer type. For example, UI frameworks typically provide timers that invoke their callbacks in a context suitable for making updates to the user interface. Rx provides some UI-framework-specific schedulers that use these timers, but these would be inappropriate choices for other scenarios. So each scheduler uses a timer suitable for the context in which it is going to run work items.
+调度器必须负责管理时间，因为 .NET 有几种不同的计时器机制，而计时器的选择通常由你希望处理计时器回调的上下文来决定。由于调度器确定工作运行的上下文，这意味着它们还必须选择计时器类型。例如，UI框架通常提供计时器，可以在适合更新用户界面的上下文中调用它们的回调。Rx 提供了一些特定于 UI 框架的调度器，使用这些计时器，但这些对于其他场景来说可能是不合适的选择。因此，每个调度器都使用适合其将要运行工作项的上下文的计时器。
 
-There's a useful upshot of this: because `IScheduler` provides an abstraction for timing-related details, it is possible to virtualize time. This is very useful for testing. If you look at the extensive test suite in the [Rx repository](https://github.com/dotnet/reactive) you will find that there are many tests that verify timing-related behaviour. If these ran in real-time, the test suite would take far too long to run, and would also be likely to produce the odd spurious failure, because background tasks running on the same machine as the tests will occasionally change the speed of execution in a way that might confuse the test. Instead, these tests use a specialized scheduler that provides complete control over the passage of time. (For more information, see the [ Test Schedulers section later](#test-schedulers) and there's also a whole [testing chapter](16_TestingRx.md) coming up.)
+这有个有用的后果：因为 `IScheduler` 提供了一个抽象的计时相关细节，所以可以对时间进行虚拟化。这对于测试非常有用。如果你查看 [Rx 代码库](https://github.com/dotnet/reactive) 中的广泛测试套件，你会发现有许多测试验证了与时间相关的行为。如果这些测试以实时运行，测试套件将花费太长时间，并且也可能产生偶尔的错误结果，因为与测试同时在同一台机器上运行的后台任务偶尔会以某种方式改变执行速度，这可能会混淆测试。相反，这些测试使用了一种专门的调度器，可以完全控制时间的流逝。（有关更多信息，请参阅稍后的[测试调度器部分](#test-schedulers)，还有一个即将讨论的[测试章节](16_TestingRx.md)。）
 
-Notice that all three `IScheduler.Schedule` methods require a callback. A scheduler will invoke this at the time and in the context that it chooses. A scheduler callback takes another `IScheduler` as its first argument. This is used in scenarios where repetitive invocation is required, as we'll see later. 
+注意，所有三个 `IScheduler.Schedule` 方法都需要一个回调。调度器将在它选择的时间和上下文中调用此回调。调度器回调的第一个参数是另一个 `IScheduler`。这在需要重复调用的场景中使用，我们稍后将看到。
 
-Rx supplies several schedulers. The following sections describe the most widely used ones.
+Rx 提供了几种调度器。以下部分描述了最广泛使用的一些。
 
 ### ImmediateScheduler
 
-`ImmediateScheduler` is the simplest scheduler Rx offers. As you saw in the preceding sections, whenever it is asked to schedule some work, it just runs it immediately. It does this inside its `IScheduler.Schedule` method.
+`ImmediateScheduler` 是 Rx 提供的最简单的调度器。正如您在之前的部分中看到的，无论何时被要求安排一些工作，它只是立即运行它。它在其 `IScheduler.Schedule` 方法内部这样做。
 
-This is a very simple strategy, and it makes `ImmediateScheduler` very efficient. For this reason, many operators default to using `ImmediateScheduler`. However, it can be problematic with operators that instantly produce multiple items, especially when the number of items might be large. For example, Rx defines the [`ToObservable` extension method for `IEnumerable<T>`](03_CreatingObservableSequences.md#from-ienumerablet). When you subscribe to an `IObservable<T>` returned by this, it will start iterating over the collection immediately, and if you were to tell it to use the `ImmediateScheduler`, `Subscribe` would not return until it reached the end of the collection. That would obviously be a problem for an infinite sequence, and it's why operators of this kind do not use `ImmediateScheduler` by default.
+这是一个非常简单的策略，它使得 `ImmediateScheduler` 非常高效。因此，许多操作符默认使用 `ImmediateScheduler`。然而，对于立即产生多个项目的操作符来说，这可能是个问题，尤其是当项目数量可能很大时。例如，Rx 为 `IEnumerable<T>` 定义了 [`ToObservable` 扩展方法](03_CreatingObservableSequences.md#from-ienumerablet)。当你订阅由此返回的 `IObservable<T>` 时，它会立即开始遍历集合，并且如果你告诉它使用 `ImmediateScheduler`，`Subscribe` 将不会返回直到它到达集合的末尾。这对于无限序列显然是个问题，这就是为什么这种类型的操作符默认不使用 `ImmediateScheduler`。
 
-The `ImmediateScheduler` also has potentially surprising behaviour when you invoke the `Schedule` overload that takes a `TimeSpan`. This asks the scheduler to run some work after the specified length of time. The way it achieves this is to call `Thread.Sleep`. With most of Rx's schedulers, this overload will arrange for some sort of timer mechanism to run the code later, enabling the current thread to get on with its business, but `ImmediateScheduler` is true to its name here, in that it refuses to engage in such deferred execution. It just blocks the current thread until it is time to do the work. This means that time-based observables like those returned by `Interval` would work if you specified this scheduler, but at the cost of preventing the thread from doing anything else.
+`ImmediateScheduler` 在调用采用 `TimeSpan` 的 `Schedule` 重载时也有潜在令人惊讶的行为。这要求调度器在指定的时间长度后运行一些工作。它实现这一点的方式是调用 `Thread.Sleep`。对于 Rx 的大多数调度器来说，这种重载将安排某种形式的计时器机制稍后运行代码，使当前线程可以继续进行其业务，但 `ImmediateScheduler` 在这里忠实地以其名字为标准，拒绝从事这种延迟执行。它只是阻塞当前线程，直到是时候做工作。这意味着像由 `Interval` 返回的基于时间的可观察对象将可以工作，如果你指定了这个调度器，但代价是阻止线程做任何其他事情。
 
-The `Schedule` overload that takes a `DateTime` is slightly different. If you specify a time less than 10 seconds into the future, it will block the calling thread like it does when you use `TimeSpan`. But if you pass a `DateTime` that is further into the future, it gives up on immediate execution, and falls back to using a timer.
+采用 `DateTime` 的 `Schedule` 重载略有不同。如果你指定的时间小于未来 10 秒，它会像使用 `TimeSpan` 那样阻止调用线程。但如果你传递的 `DateTime` 更远的未来，它会放弃立即执行，并改用使用计时器。
 
 ### CurrentThreadScheduler
 
-The `CurrentThreadScheduler` is very similar to the `ImmediateScheduler`. The difference is how it handles requests to schedule work when an existing work item is already being handled on the current thread. This can happen if you chain together multiple operators that use schedulers to do their work.
+`CurrentThreadScheduler` 与 `ImmediateScheduler` 非常相似。不同之处在于它如何处理当前线程已经在处理现有工作项时的安排工作请求。如果你将多个使用调度器的操作符链接在一起，这种情况就会发生。
 
-To understand what happens, it's helpful to know how sources that produce multiple items in quick succession, such as the [`ToObservable` extension method for `IEnumerable<T>`](03_CreatingObservableSequences.md#from-ienumerablet) or [`Observable.Range`](03_CreatingObservableSequences.md#observablerange), use schedulers. These kinds of operators do not use normal `for` or `foreach` loops. They typically schedule a new work item for each iteration (unless the scheduler happens to make special provisions for long-running work). Whereas the `ImmediateScheduler` will run such work immediately, the `CurrentThreadScheduler` checks to see if it is already processing a work item. We saw that with this example from earlier:
+要理解发生了什么，了解产生多个项目的快速连续源是有帮助的，例如 `IEnumerable<T>` 的 [`ToObservable` 扩展方法](03_CreatingObservableSequences.md#from-ienumerablet) 或 [`Observable.Range`](03_CreatingObservableSequences.md#observablerange)，这些源如何使用调度器。这些类型的操作符不使用普通的 `for` 或 `foreach` 循环。它们通常为每次迭代安排一个新的工作项（除非调度器恰好为长时间运行的工作提供特殊规定）。而 `ImmediateScheduler` 将立即运行此类工作，`CurrentThreadScheduler` 会检查它是否已在此线程上处理工作项。我们在前面的示例中看到了这一点：
 
 ```csharp
 Observable
@@ -402,46 +402,46 @@ Observable
         m => Console.WriteLine($"Received {m} on thread: {Environment.CurrentManagedThreadId}"));
 ```
 
-Let's follow exactly what happens here. First, assume that this code is just running normally and not in any unusual context—perhaps inside the `Main` entry point of a program. When this code calls `Subscribe` on the `IObservable<int>` returned by `SelectMany`, that will in turn will call `Subscribe` on the `IObservable<int>` returned by the first `Observable.Range`, which will in turn schedule a work item for the generation of the first value in the range (`1`).
+让我们准确地跟踪这里发生了什么。首先，假设这段代码正常运行并且没有在任何不寻常的上下文中运行——也许在程序的 `Main` 入口点内。当这段代码调用由 `SelectMany` 返回的 `IObservable<int>` 的 `Subscribe` 时，它将依次调用由第一个 `Observable.Range` 返回的 `IObservable<int>` 的 `Subscribe`，这将依次安排一个工作项来生成范围中的第一个值（`1`）。
 
-Since we didn't pass a scheduler explicitly to `Range`, it will use its default choice, the `CurrentThreadScheduler`, and that will ask itself "Am I already in the middle of handling some work item on this thread?" In this case the answer will be "no," so it will run the work item immediately (before returning from the `Schedule` call made by the `Range` operator). The `Range` operator will then produce its first value, calling `OnNext` on the `IObserver<int>` that the `SelectMany` operator provided when it subscribed to the range.
+由于我们没有向 `Range` 明确传递调度器，它将使用其默认选择，即 `CurrentThreadScheduler`，并会问自己：“我是否已在此线程中处理一些工作项？”。在这种情况下，答案将是“否”，所以它会立即运行工作项（在 `Range` 操作符发出的 `Schedule` 调用返回之前）。然后，`Range` 操作符将产生其第一个值，调用 `SelectMany` 操作符提供的 `IObserver<int>` 的 `OnNext`。
 
-The `SelectMany` operator's `OnNext` method will now invoke its lambda, passing in the argument supplied (the value `1` from the `Range` operator). You can see from the example above that this lambda calls `Observable.Range` again, returning a new `IObservable<int>`. `SelectMany` will immediately subscribe to this (before returning from its `OnNext`). This is the second time this code has ended up calling `Subscribe` on an `IObservable<int>` returned by a `Range` (but it's a different instance than the last time), and `Range` will once again default to using the `CurrentThreadScheduler`, and will once again schedule a work item to perform the first iteration.
+`SelectMany` 操作符的 `OnNext` 方法现在将调用其 lambda，传入提供的参数（来自 `Range` 操作符的值 `1`）。您可以从上面的示例中看到，这个 lambda 再次调用 `Observable.Range`，返回一个新的 `IObservable<int>`。`SelectMany` 将立即订阅此（在其 `OnNext` 返回之前）。这是第二次调用由 `Range` 返回的 `IObservable<int>` 的 `Subscribe`（但这是不同的实例），`Range` 将再次默认使用 `CurrentThreadScheduler`，并再次安排一个工作项来执行第一次迭代。
 
-So once again,the `CurrentThreadScheduler` will ask itself "Am I already in the middle of handling some work item on this thread?" But this time, the answer will be yes. And this is where the behaviour is different than `ImmediateScheduler`. The `CurrentThreadScheduler` maintains a queue of work for each thread that it gets used on, and in this case it just adds the newly scheduled work to the queue, and returns back to the `SelectMany` operators `OnNext`.
+所以再一次，`CurrentThreadScheduler` 会问自己：“我是否已在此线程中处理一些工作项？” 但这次，答案是肯定的。这就是行为不同于 `ImmediateScheduler` 的地方。`CurrentThreadScheduler` 为每个使用它的线程维护一个工作队列，并在这种情况下只是将新安排的工作添加到队列中，并立即从 `SelectMany` 操作符的 `OnNext` 返回。
 
-`SelectMany` has now completed its handling of this item (the value `1`) from the first `Range`, so its `OnNext` returns. At this point, this outer `Range` operator schedules another work item. Again, the `CurrentThreadScheduler` will detect that it is currently running a work item, so it just adds this to the queue.
+`SelectMany` 现在已完成处理来自第一个 `Range` 的此项目（值 `1`）的处理，所以它的 `OnNext` 返回。此时，这个外部的 `Range` 操作符安排另一个工作项。再次，`CurrentThreadScheduler` 将检测到它当前正在处理一个工作项，所以它只是将此添加到队列中。
 
-Having scheduled the work item that is going to generate its second value (`2`), the `Range` operator returns. Remember, the code in the `Range` operator that was running at this point was the callback for the first scheduled work item, so it's returning to the `CurrentThreadScheduler`—we are back inside its `Schedule` method (which was invoked by the range operator's `Subscribe` method).
+安排了生成其第二个值（`2`）的工作项之后，`Range` 操作符返回。请记住，此时运行的 `Range` 操作符中的代码是第一个安排的工作项的回调，所以它返回到 `CurrentThreadScheduler`——我们回到了其 `Schedule` 方法内部（由 range 操作符的 `Subscribe` 方法调用）。
 
-At this point, the `CurrentThreadScheduler` does not return from `Schedule` because it checks its work queue, and will see that there are now two items in the queue. (There's the work item that the nested `Range` observable scheduled to generate its first value, and there's also the work item that the top-level `Range` observable just scheduled to generate its second value.) The `CurrentThreadScheduler` will now execute the first of these: the nested `Range` operator now gets to generate its first value (which will be `10`), so it calls `OnNext` on the observer supplied by `SelectMany`, which will then call its observer, which was supplied thanks to the top-level call to `Subscribe` in the example. And that observer will just call the lambda we passed to `Subscribe`, causing our `Console.WriteLine` to run. After that returns, the nested `Range` operator will schedule another work item to generate its second item. Again, the `CurrentThreadScheduler` will realise that it's already in the middle of handling a work item on this thread, so it just puts it in the queue and then returns immediately from `Schedule`. The nested `Range` operator is now done for this iteration so it returns back to the scheduler. The scheduler will now pick up the next item in the queue, which in this case is the work item added by the top-level `Range` to produce the second item.
+此时，`CurrentThreadScheduler` 不会从 `Schedule` 返回，因为它会检查工作队列，并会看到现在队列中有两个项目。（有一个是嵌套的 `Range` 可观察对象安排的用于生成其第一个值的工作项，还有一个是顶级的 `Range` 可观察对象刚刚安排的用于生成其第二个值的工作项。）`CurrentThreadScheduler` 现在将执行其中的第一个：嵌套的 `Range` 操作符现在将生成其第一个值（将是 `10`），因此它调用由 `SelectMany` 提供的观察者的 `OnNext`，然后调用由示例中顶级的 `Subscribe` 调用提供的观察者，这个观察者只是调用我们传递给 `Subscribe` 的 lambda，导致我们的 `Console.WriteLine` 运行。返回之后，嵌套的 `Range` 操作符将安排另一个工作项来生成其第二个项目。同样，`CurrentThreadScheduler` 将意识到它已在此线程上处理一个工作项，因此它只是将其放在队列中，然后立即从 `Schedule` 返回。嵌套的 `Range` 操作符现在完成了这次迭代，因此它返回给调度器。调度器现在将拿起队列中的下一项，这种情况下是由顶级的 `Range` 添加的用于生成第二个项目的工作项。
 
-And so it continues. This queuing of work items when work is already in progress is what enables multiple observable sources to make progress in parallel.
+并且它继续。当工作正在进行中时，工作项的排队就是使多个可观察来源能够并行进行的原因。
 
-By contrast, the `ImmediateScheduler` runs new work items immediately, which is why we don't see this parallel progress.
+相比之下，`ImmediateScheduler` 会立即运行新的工作项，这就是我们没有看到这种并行进展的原因。
 
-(To be strictly accurate, there are certain scenarios in which `ImmediateScheduler` can't run work immediately. In these iterative scenarios, it actually supplies a slightly different scheduler that the operators use to schedule all work after the first item, and this checks whether it's being asked to process multiple work items simultaneously. If it is, it falls back to a queuing strategy similar to `CurrentThreadScheduler`, except it's a queue local to the initial work item, instead of a per-thread queue. This prevents problems due to multithreading, and it also avoids stack overflows that would otherwise occur when an iterative operator schedules a new work item inside the handler for the current work item. Since the queue is not shared across all work in the thread, this still has the effect of ensuring that any nested work queued up by a work item completes before the call to `Schedule` returns. So even when this queueing kicks in, we typically don't see interleaving of work from separate sources like we do with `CurrentThreadScheduler`. For example, if we told the nested `Range` to use `ImmediateScheduler`, this queueing behaviour would kick in as `Range` starts to iterate, but because the queue is local to initial work item executed by that nested `Range`, it will end up producing all of the nested `Range` items before returning.)
+（严格准确地说，在某些情况下，`ImmediateScheduler` 无法立即运行工作。在这些迭代情形中，它实际上提供了一个稍有不同的调度器，操作符用于安排第一个项目之后的所有工作，这将检查它是否被要求同时处理多个工作项。如果是这样的话，它将退回到类似于 `CurrentThreadScheduler` 的排队策略，反之是一个局部于初始项目的队列，而不是每个线程的队列。这避免了由于多线程引起的问题，也避免了迭代操作符在当前工作项的处理程序内部安排新的工作项导致的栈溢出。因为队列不是跨线程中所有工作共享的，这仍然具有确保由工作项排队的任何嵌套工作在调用 `Schedule` 返回之前完成的效果。所以即使这种排队踢踏，我们通常也不会看到像我们在 `CurrentThreadScheduler` 中所做的那样不同来源的工作交织在一起。例如，如果我们告诉嵌套的 `Range` 使用 `ImmediateScheduler`，这种排队行为将在 `Range` 开始迭代时踢踏，但因为队列是局部于由那个嵌套的 `Range` 执行的初始工作项的，它将在返回之前产生所有嵌套的 `Range` 项目。）
 
 ### DefaultScheduler
 
-The `DefaultScheduler` is intended for work that may need to be spread out over time, or where you are likely to want concurrent execution. These features mean that this can't guarantee to run work on any particular thread, and in practice it schedules work via the CLR's thread pool. This is the default scheduler for all of Rx's time-based operators, and also for the `Observable.ToAsync` operator that can wrap a .NET method as an `IObservable<T>`.
+`DefaultScheduler` 旨在用于可能需要分散时间进行或可能需要并发执行的工作。这些功能意味着这不能保证在任何特定线程上运行工作，并且实际上它通过 CLR 的线程池安排工作。这是 Rx 的所有基于时间的操作符默认的调度器，也是可以将 .NET 方法作为 `IObservable<T>` 包装的 `Observable.ToAsync` 操作符的默认调度器。
 
-Although this scheduler is useful if you would prefer work not to happen on your current thread—perhaps you're writing an application with a user interface and you prefer to avoid doing too much work on the thread responsible for updating the UI and responding to user input—the fact that it can end up running work on any thread may make like complicated. What if you want all the work to happen on one thread, just not the thread you're on now? There's another scheduler for that.
+尽管如果你希望工作不在当前线程上发生，这个调度器很有用——也许你正在编写一个带有用户界面的应用程序，希望避免在负责更新UI和响应用户输入的线程上做太多工作——但它可能在任何线程上运行工作的事实可能会使情况变得复杂。如果你想所有工作都在一个线程上进行，只是不是你现在所在的线程怎么办？有另一个调度器适用于此。
 
 ### EventLoopScheduler
 
-The `EventLoopScheduler` provides one-at-a-time scheduling, queuing up newly scheduled work items. This is similar to how the `CurrentThreadScheduler` operates if you use it from just one thread. The difference is that `EventLoopScheduler` creates a dedicated thread for this work instead of using whatever thread you happen to schedule the work from.
+`EventLoopScheduler` 提供一次一个的调度，将新安排的工作项排入队列。这类似于如果你只从一个线程使用它的话，`CurrentThreadScheduler` 的工作方式。不同之处在于 `EventLoopScheduler` 为此工作创建了一个专用线程，而不是使用你恰好从中安排工作的线程。
 
-Unlike the schedulers we've examined so far, there is no static property for obtaining an `EventLoopScheduler`. That's because each one has its own thread, so you need to create one explicitly. It offers two constructors:
+与我们迄今为止考察的调度器不同，没有静态属性可以获得 `EventLoopScheduler`。这是因为每个都有自己的线程，所以你需要显式创建一个。它提供了两个构造函数：
 
 ```csharp
 public EventLoopScheduler()
 public EventLoopScheduler(Func<ThreadStart, Thread> threadFactory)
 ```
 
-The first creates a thread for you. The second lets you control the thread creation process. It invokes the callback you supply, and it will pass this its own callback that you are required to run on the newly created thread.
+第一个为您创建一个线程。第二个允许您控制线程创建过程。它会调用您提供的回调，并将向此传递其自己的回调，您需要在新创建的线程上运行此回调。
 
-The `EventLoopScheduler` implements `IDisposable`, and calling Dispose will allow the thread to terminate. This can work nicely with the `Observable.Using` method. The following example shows how to use an `EventLoopScheduler` to iterate over all contents of an `IEnumerable<T>` on a dedicated thread, ensuring that the thread exits once we have finished:
+`EventLoopScheduler` 实现了 `IDisposable`，调用 Dispose 将允许线程终止。这可以很好地与 `Observable.Using` 方法一起使用。以下示例展示了如何使用 `EventLoopScheduler` 在专用线程上迭代 `IEnumerable<T>` 的所有内容，并确保我们完成后线程退出：
 
 ```csharp
 IEnumerable<int> xs = GetNumbers();
@@ -454,45 +454,45 @@ Observable
 
 ### NewThreadScheduler
 
-The `NewThreadScheduler` creates a new thread to execute every work item it is given. This is unlikely to make sense in most scenarios. However, it might be useful in cases where you want to execute some long running work, and represent its completion through an `IObservable<T>`. The `Observable.ToAsync` does exactly this, and will normally use the `DefaultScheduler`, meaning it will run the work on a thread pool thread. But if the work is likely to take more than second or two, the thread pool may not be a good choice, because it is optimized for short execution times, and its heuristics for managing the size of the thread pool are not designed with long-running operations in mind. The `NewThreadScheduler` may be a better choice in this case.
+`NewThreadScheduler` 创建一个新线程来执行它给定的每个工作项。这在大多数情况下可能没有意义。但是，在您想要执行一些长时间运行的工作，并通过 `IObservable<T>` 表示其完成时，这可能是有用的。`Observable.ToAsync` 正是这样做的，并且通常会使用 `DefaultScheduler`，这意味着它会在线程池线程上运行工作。但如果工作可能需要一两秒以上，线程池可能不是一个好的选择，因为它针对短执行时间进行了优化，其管理线程池大小的启发式算法并不适用于长时间运行的操作。在这种情况下，`NewThreadScheduler` 可能是一个更好的选择。
 
-Although each call to `Schedule` creates a new thread, the `NewThreadScheduler` passes a different scheduler into work item callbacks, meaning that anything that attempts to perform iterative work will not create a new thread for every iteration. For example, if you use `NewThreadScheduler` with `Observable.Range`, you will get a new thread each time you subscribe to the resulting `IObservable<int>`, but you won't get a new thread for each item, even though `Range` does schedule a new work item for each value it produces. It schedules these per-value work items through the nested scheduler supplied to the work item callback, and the nested scheduler that `NewThreadScheduler` supplies in these cases invokes all such nested work items on the same thread.
+尽管每次调用 `Schedule` 都会创建一个新线程，`NewThreadScheduler` 在工作项回调中传递了一个不同的调度器，这意味着任何尝试进行迭代工作的东西都不会为每次迭代创建一个新线程。例如，如果您使用 `NewThreadScheduler` 和 `Observable.Range`，您将在每次订阅生成的 `IObservable<int>` 时获得一个新线程，但您不会为每个项目获得一个新线程，即使 `Range` 确实为每个值产生的工作项安排了一个新的工作项。它通过嵌套调度器将这些按值工作项调度到回调中，嵌套调度器由 `NewThreadScheduler` 提供，并且这些情况下的嵌套调度器在同一线程上调用所有这样的嵌套工作项。
 
 ### SynchronizationContextScheduler
 
-This invokes all work through a [`SynchronizationContext`](https://learn.microsoft.com/en-us/dotnet/api/system.threading.synchronizationcontext). This is useful in user interface scenarios. Most .NET client-side user interface frameworks make a `SynchronizationContext` available that can be used to invoke callbacks in a context suitable for making changes to the UI. (Typically this involves invoking them on the correct thread, but individual implementations can decide what constitutes the appropriate context.)
+这通过 [`SynchronizationContext`](https://learn.microsoft.com/en-us/dotnet/api/system.threading.synchronizationcontext) 调用所有工作。这在用户界面场景中很有用。大多数 .NET 客户端用户界面框架都提供了一个 `SynchronizationContext`，可以用来在适合进行 UI 更改的上下文中调用回调。（通常这涉及在正确的线程上调用它们，但各个实现可以决定什么构成适当的上下文。）
 
 ### TaskPoolScheduler
 
-Invokes all work via the thread pool using [TPL tasks](https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/task-parallel-library-tpl). The TPL was introduced many years after the CLR thread pool, and is now the recommended way to launch work via the thread pool. At the time the TPL was added, the thread pool would use a slightly different algorithm when you scheduled work through tasks than it would use if you relied on the older thread pool APIs. This newer algorithm enabled it to be more efficient in some scenarios. The documentation is now rather vague about this, so it's not clear whether these differences still exist on modern .NET, but tasks continue to be the recommended mechanism for using the thread pool. Rx's DefaultScheduler uses the older CLR thread pool APIs for backwards compatibility reasons. In performance critical code you could try using the `TaskPoolScheduler` instead in cases where a lot of work is being run on thread pool threads to see if it offers any performance benefits for your workload.
+通过使用 [TPL 任务](https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/task-parallel-library-tpl) 通过线程池调用所有工作。TPL 是在 CLR 线程池之后许多年引入的，现在是通过线程池启动工作的推荐方式。在添加 TPL 时，线程池会在您通过任务安排工作时使用与依赖较旧的线程池 API 时略有不同的算法。这种新算法使其在某些情况下更有效。文档现在关于这一点相当含糊，因此不清楚这些差异在现代 .NET 上是否仍然存在，但任务继续是使用线程池的推荐机制。出于向后兼容的原因，Rx 的 DefaultScheduler 使用较旧的 CLR 线程池 API。在性能关键的代码中，如果有很多工作在线程池线程上运行，您可以尝试在这些情况下使用 `TaskPoolScheduler` 看看它是否为您的工作负载提供任何性能优势。
 
 ### ThreadPoolScheduler
 
-Invokes all work through the thread pool using the old pre-[TPL](https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/task-parallel-library-tpl) API. This type is a historical artifact, dating back to when not all platforms offered the same kind of thread pool. In almost all cases, if you want the behaviour for which this type was designed, you should use the `DefaultScheduler` (although [`TaskPoolScheduler`](#taskpoolscheduler) offers a different behaviour that might be). The only scenario in which using `ThreadPoolScheduler` makes any difference is when writing UWP applications. The UWP target of `System.Reactive` v6.0 provides a different implementation of this class than you get for all other targets. It uses `Windows.System.Threading.ThreadPool` whereas all other targets use `System.Threading.ThreadPool`. The UWP version provides properties letting you configure some features specific to the UWP thread pool.
+通过使用旧的、在 [TPL](https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/task-parallel-library-tpl) 之前的 API 通过线程池调用所有工作。这种类型是一个历史遗留物，可以追溯到并非所有平台都提供相同类型的线程池的时候。在几乎所有情况下，如果您想要这种行为，您应该使用 `DefaultScheduler`（尽管 [`TaskPoolScheduler`](#taskpoolscheduler) 提供了不同的行为，可能是）。使用 `ThreadPoolScheduler` 唯一有差异的场景是编写 UWP 应用程序。`System.Reactive` v6.0 的 UWP 目标为这个类提供了不同于您为所有其他目标获取的不同实现。它使用 `Windows.System.Threading.ThreadPool`，而所有其他目标使用 `System.Threading.ThreadPool`。UWP 版本提供了让您配置 UWP 线程池的特定功能的属性。
 
-In practice it's best to avoid this class in new code. The only reason the UWP target had a different implementation was that UWP used not to provide `System.Threading.ThreadPool`. But that changed when UWP added support for .NET Standard 2.0 in Windows version 10.0.19041. There is no longer any good reason for there to be a UWP-specific `ThreadPoolScheduler`, and it's a source of confusion that this type is quite different in the UWP target but it has to remain for backwards compatibility purposes. (It may well be deprecated because Rx 7 will be addressing some problems arising from the fact that the `System.Reactive` component currently has direct dependencies on UI frameworks.) If you use the `DefaultScheduler` you will be using the `System.Threading.ThreadPool` no matter which platform you are running on.
+实际上，最好在新代码中避免使用这个类。UWP 目标拥有不同的实现的唯一原因是 UWP 过去不提供 `System.Threading.ThreadPool`。但这在 UWP 支持 .NET Standard 2.0 的 Windows 版本 10.0.19041 更改时就发生了。不再有任何好的理由存在 UWP 特定的 `ThreadPoolScheduler`，它是一个引起困惑的来源，因为这种类型在 UWP 目标中非常不同，但它必须因向后兼容的目的而保留。（它可能会被弃用，因为 Rx 7 将解决一些问题，这些问题来自于 `System.Reactive` 组件当前直接依赖 UI 框架的事实。）如果您使用 `DefaultScheduler`，无论您在哪个平台上运行，都将使用 `System.Threading.ThreadPool`。
 
-### UI Framework Schedulers: ControlScheduler, DispatcherScheduler and CoreDispatcherScheduler
+### UI 框架调度器：ControlScheduler，DispatcherScheduler 和 CoreDispatcherScheduler
 
-Although the `SynchronizationContextScheduler` will work for all widely used client-side UI frameworks in .NET, Rx offers more specialized schedulers. `ControlScheduler` is for Windows Forms applications, `DispatcherScheduler` for WPF, and `CoreDispatcherScheduler` for UWP.
+尽管 `SynchronizationContextScheduler` 将适用于 .NET 中所有广泛使用的客户端 UI 框架，Rx 提供了更专业的调度器。`ControlScheduler` 适用于 Windows Forms 应用程序，`DispatcherScheduler` 适用于 WPF，`CoreDispatcherScheduler` 适用于 UWP。
 
-These more specialized types offer two benefits. First, you don't necessarily have to be on the target UI thread to obtain an instance of these schedulers. Whereas with `SynchronizationContextScheduler` the only way you can generally obtain the `SynchronizationContext` this requires is by retrieving `SynchronizationContext.Current` while running on the UI thread. But these other UI-framework-specific schedulers can be passed a suitable `Control`, `Dispatcher` or `CoreDispatcher`, which it's possible to obtain from a non-UI thread. Second, `DispatcherScheduler` and `CoreDispatcherScheduler` provide a way to use the prioritisation mechanism supported by the `Dispatcher` and `CoreDispatcher` types.
+这些更专门的类型提供了两个好处。首先，您不必一定要在目标 UI 线程上才能获得这些调度器的实例。而与 `SynchronizationContextScheduler` 不同，通常获取此所需的 `SynchronizationContext` 的唯一方法是在 UI 线程上运行时检索 `SynchronizationContext.Current`。但这些其他 UI 框架特定的调度器可以传递一个合适的 `Control`、`Dispatcher` 或 `CoreDispatcher`，这是可以从非 UI 线程获得的。其次，`DispatcherScheduler` 和 `CoreDispatcherScheduler` 提供了使用 `Dispatcher` 和 `CoreDispatcher` 类型支持的优先级机制的方法。
 
-### Test Schedulers
+### 测试调度器
 
-The Rx libraries define several schedulers that virtualize time, including `HistoricalScheduler`, `TestScheduler`, `VirtualTimeScheduler`, and `VirtualTimeSchedulerBase`. We will look at this sort of scheduler in the [Testing chapter](16_TestingRx.md).
+Rx 库定义了几个虚拟化时间的调度器，包括 `HistoricalScheduler`、`TestScheduler`、`VirtualTimeScheduler` 和 `VirtualTimeSchedulerBase`。我们将在[测试章节](16_TestingRx.md)中研究这类调度器。
 
-## SubscribeOn and ObserveOn
+## SubscribeOn 和 ObserveOn
 
-So far, I've talked about why some Rx sources need access to schedulers. This is necessary for timing-related behaviour, and also for sources that produce items as quickly as possible. But remember, schedulers control three things:
+到目前为止，我已经讨论了为什么一些Rx源需要访问调度器。这对于与时间相关的行为是必要的，也适用于尽快生成项目的源。但请记住，调度器控制三件事：
 
-- determining the context in which to execute work (e.g., a certain thread)
-- deciding when to execute work (e.g., immediately, or deferred)
-- keeping track of time
+- 确定执行工作的上下文（例如，某个特定线程）
+- 决定何时执行工作（例如，立即执行或推迟执行）
+- 跟踪时间
 
-The discussion so far as mostly focused on the 2nd and 3rd features. When it comes to our own application code, we are most likely to use schedulers to control that first aspect. Rx defines two extension methods to `IObservable<T>` for this: `SubscribeOn` and `ObserveOn`. Both methods take an `IScheduler` and return an `IObservable<T>` so you can chain more operators downstream of these.
+到目前为止的讨论主要集中在第2点和第3点上。当涉及到我们自己的应用程序代码时，我们最有可能使用调度器来控制第一个方面。Rx为`IObservable<T>`定义了两个扩展方法：`SubscribeOn`和`ObserveOn`。这两种方法都需要一个`IScheduler`参数，并返回一个`IObservable<T>`，因此你可以在这些方法之后链式调用更多的操作符。
 
-These methods do what their names suggest. If you use `SubscribeOn`, then when you call `Subscribe` on the resulting `IObservable<T>` it arranges to call the original `IObservable<T>`'s `Subscribe` method via the specified scheduler. Here's an example:
+这些方法的作用与它们的名称所暗示的一样。如果你使用`SubscribeOn`，那么当你在结果的`IObservable<T>`上调用`Subscribe`时，它会安排通过指定的调度器调用原始的`IObservable<T>`的`Subscribe`方法。这里有一个例子：
 
 ```csharp
 Console.WriteLine($"[T:{Environment.CurrentManagedThreadId}] Main thread");
@@ -512,9 +512,9 @@ Observable
 Console.WriteLine($"[T:{Environment.CurrentManagedThreadId}] {DateTime.Now}: Main thread exiting");
 ```
 
-This calls `Observable.Interval` (which uses `DefaultScheduler` by default), but instead of subscribing directly to this, it first takes the `IObservable<T>` returned by `Interval` and invokes `SubscribeOn`. I've used an `EventLoopScheduler`, and I've passed it a factory callback for the thread that it will use to ensure that it is a non-background thread. (By default `EventLoopScheduler` creates itself a background thread, meaning that the thread won't force the process to stay alive. Normally that's what you'd want but I'm changing that in this example to show what's happening.)
+这将调用`Observable.Interval`（默认情况下使用`DefaultScheduler`），但是而不是直接订阅它，而是先取`Interval`返回的`IObservable<T>`并调用`SubscribeOn`。我使用了一个`EventLoopScheduler`，并且我传递了一个工厂回调来创建它将使用的线程，以确保这是一个非后台线程。（默认情况下，`EventLoopScheduler`会创建一个后台线程，这意味着该线程不会强制进程保持活动状态。通常这就是你想要的，但我在这个示例中改变它是为了展示正在发生的事情。）
 
-When I call `Subscribe` on the `IObservable<long>` returned by `SubscribeOn`, it calls `Schedule` on the `EventLoopScheduler` that I supplied, and in the callback for that work item, it then calls `Subscribe` on the original `Interval` source. So the effect is that the subscription to the underlying source doesn't happen on my main thread, it happens on the thread created for my `EventLoopScheduler`. Running the program produces this output:
+当我在`SubscribeOn`返回的`IObservable<long>`上调用`Subscribe`时，它会在我提供的`EventLoopScheduler`上调用`Schedule`，在该工作项的回调中，它接着调用原始`Interval`源的`Subscribe`。所以效果是对底层源的订阅不是在我的主线程上发生的，而是在为我的`EventLoopScheduler`创建的线程上发生的。运行程序产生以下输出：
 
 ```
 [T:1] Main thread
@@ -526,23 +526,23 @@ When I call `Subscribe` on the `IObservable<long>` returned by `SubscribeOn`, it
 ...
 ```
 
-Notice that my application's main thread exits before the source begins producing notifications. But also notice that the thread id for the newly created thread is 12, and yet my notifications are coming through on a different thread, with id 6! What's happening?
+注意我的应用程序的主线程在源开始产生通知之前就退出了。但也请注意新创建的线程的线程id为12，而我的通知却是在不同的线程上，线程id为6！这是怎么回事？
 
-This often catches people out. The scheduler on which you subscribe to an observable source doesn't necessarily have any impact on how the source behaves once it is up and running. Remember earlier that I said `Observable.Interval` uses `DefaultScheduler` by default? Well we've not specified a scheduler for the `Interval` here, so it will be using that default. It doesn't care what context we invoke its `Subscribe` method from. So really, the only effect of introducing the `EventLoopScheduler` here has been to keep the process alive even after its main thread exits. That scheduler thread never actually gets used again after it makes its initial `Subscribe` call into the `IObservable<long>` returned by `Observable.Interval`. It just sits patiently waiting for further calls to `Schedule` that never come.
+这经常让人们感到困惑。你订阅一个可观察源的调度器并不一定会影响该源一旦运行起来后的行为。记住之前我说过的，`Observable.Interval`默认使用`DefaultScheduler`？好了，我们在这里没有为`Interval`指定调度器，所以它将使用那个默认值。它不在乎我们从哪个上下文调用它的`Subscribe`方法。所以实际上，这里引入`EventLoopScheduler`的唯一影响是保持进程活动，即使它的主线程已经退出。那个调度器线程在它进行最初的`Subscribe`调用进入由`Observable.Interval`返回的`IObservable<long>`后，再也没有被使用过。它只是耐心地等待进一步调用`Schedule`的电话，但这些电话永远也不会来。
 
-Not all sources are completely unaffected by the context in which their `Subscribe` is invoked, though. If I were to replace this line:
+不过，并不是所有的源都完全不受调用它们`Subscribe`的上下文影响。例如，如果我用这行代码：
 
 ```csharp
     .Interval(TimeSpan.FromSeconds(1))
 ```
 
-with this:
+替换为这样：
 
 ```csharp
     .Range(1, 5)
 ```
 
-then we get this output:
+然后我们得到这样的输出：
 
 ```
 [T:1] Main thread
@@ -555,13 +555,13 @@ then we get this output:
 [T:12] 21/07/2023 15:02:09: Tick 5
 ```
 
-Now all the notifications are coming in on thread 12, the thread created for the `EventLoopScheduler`. Note that even here, `Range` isn't using that scheduler. The difference is that `Range` defaults to `CurrentThreadScheduler`, so it will generate its outputs from whatever thread you happen to call it from. So even though it's not actually using the `EventLoopScheduler`, it does end up using that scheduler's thread, because we used that scheduler to subscribe to the `Range`.
+现在所有的通知都在线程12上进来，这是为`EventLoopScheduler`创建的线程。注意即使在这里，`Range`也没有使用那个调度器。不同之处在于，`Range`默认使用`CurrentThreadScheduler`，所以它会从你调用它的任何线程产生输出。所以即使它实际上没有使用`EventLoopScheduler`，它确实结束了使用那个调度器的线程，因为我们用那个调度器来订阅`Range`。
 
-So this illustrates that `SubscribeOn` is doing what it promises: it does determine the context from which `Subscribe` is invoked. It's just that it doesn't always matter what context that is. If `Subscribe` does non-trivial work, it can matter. For example, if you use [`Observable.Create`](03_CreatingObservableSequences.md#observablecreate) to create a custom sequence, `SubscribeOn` determines the context in which the callback you passed to `Create` is invoked. But Rx doesn't have a concept of a 'current' scheduler—there's no way to ask "which scheduler was I invoked from?"—so Rx operators don't just inherit their scheduler from the context on which they were subscribed.
+所以这说明了`SubscribeOn`确实做了它承诺的事情：它确实确定了从哪个上下文调用`Subscribe`。只是这不总是重要的。如果`Subscribe`做了一些重要的工作，这可能很重要。例如，如果你使用[`Observable.Create`](03_CreatingObservableSequences.md#observablecreate)来创建一个自定义序列，`SubscribeOn`决定了调用你传递给`Create`的回调的上下文。但Rx没有一个'current'调度器的概念——没有办法询问"我是从哪个调度器被调用的？"——所以Rx操作符不会仅仅继承它们被订阅时的上下文中的调度器。
 
-When it comes to emitting items, most of the sources Rx supplies fall into one of three categories. First, operators that produce outputs in response to inputs from an upstream source (e.g., `Where`, `Select`, or `GroupBy`) generally call their observers methods from inside their own `OnNext`. So whatever context their source observable was running in when it called `OnNext`, that's the context the operator will use when calling its observer. Second, operators that produce items either iteratively, or based on timing will use a scheduler (either explicitly supplied, or a default type when none is specified). Third, some sources just produce items from whatever context they like. For example, if an `async` method uses `await` and specifies `ConfigureAwait(false)` then it could be on more or less any thread and in any context after the `await` completes, and it might then go on to invoke `OnNext` on an observer.
+在发出项目时，Rx提供的大多数源归为三类。首先，那些响应来自上游源的输入而产生输出的操作符（例如，`Where`、`Select`或`GroupBy`）通常会在它们自己的`OnNext`里调用它们的观察者方法。所以无论它们的源可观察对象在调用`OnNext`时处于什么上下文，那就是操作符将使用的上下文来调用它的观察者。其次，那些基于迭代或时间产生项目的操作符将使用调度器（无论是明确提供的，还是在没有指定时使用默认类型）。第三，有些源只是从它们喜欢的任何上下文产生项目。例如，如果一个`async`方法使用`await`并指定`ConfigureAwait(false)`，那么在`await`完成后它可能在几乎任何线程和任何上下文中，然后可能继续调用观察者的`OnNext`。
 
-As long as a source follows [the fundamental rules of Rx sequences](02_KeyTypes.md#the-fundamental-rules-of-rx-sequences), it's allowed to invoke its observer's methods from any context it likes. It can choose to accept a scheduler as input and to use that, but it's under no obligation to. And if you have an unruly source of this kind that you'd like to tame, that's where the `ObserveOn` extension method comes in. Consider the following rather daft example:
+只要一个源遵循[Rx序列的基本规则](02_KeyTypes.md#the-fundamental-rules-of-rx-sequences)，它就可以从它喜欢的任何上下文调用它的观察者的方法。它可以选择接受一个调度器作为输入并使用它，但它并没有这样做的义务。如果你有这样一个难以驾驭的源，你想要驯服它，这时就需要用到`ObserveOn`扩展方法了。考虑以下相当愚蠢的例子：
 
 ```csharp
 Observable
@@ -571,7 +571,7 @@ Observable
       Console.WriteLine($"{DateTime.Now}-{Environment.CurrentManagedThreadId}: Tick {tick}"));
 ```
 
-This deliberately causes every notification to arrive on a different thread, as this output shows:
+这故意使每个通知都在不同的线程上到达，如此输出所示：
 
 ```
 Main thread: 1
@@ -582,7 +582,7 @@ Main thread: 1
 ...
 ```
 
-(It's achieving this by calling `Observable.Return` for every single tick that emerges from `Interval`, and telling `Return` to use the `NewThreadScheduler`. Each such call to `Return` will create a new thread. This is a terrible idea, but it is an easy way to get a source that calls from a different context every time.) If I want to impose some order, I can add a call to `ObserveOn`:
+（它通过为从`Interval`中产生的每一个tick调用`Observable.Return`，并告诉`Return`使用`NewThreadScheduler`来实现这一点。每次对`Return`的调用都将创建一个新线程。这是一个糟糕的主意，但这是让一个源每次都从不同的上下文中调用的简单方法。）如果我想施加一些顺序，我可以添加一个调用到`ObserveOn`：
 
 ```csharp
 Observable
@@ -593,7 +593,7 @@ Observable
       Console.WriteLine($"{DateTime.Now}-{Environment.CurrentManagedThreadId}: Tick {tick}"));
 ```
 
-I've created an `EventLoopScheduler` here because it creates a single thread, and runs every scheduled work item on that thread. The output now shows the same thread id (13) every time:
+我在这里创建了一个`EventLoopScheduler`，因为它创建了一个单一的线程，并在那个线程上运行每个计划的工作项目。输出现在显示每次都是同一个线程id（13）：
 
 ```
 Main thread: 1
@@ -604,24 +604,24 @@ Main thread: 1
 ...
 ```
 
-So although each new observable created by `Observable.Return` creates a brand new thread, `ObserveOn` ensures that my observer's `OnNext` (and `OnCompleted` or `OnError` in cases where those are called) is invoked via the specified scheduler.
+所以虽然每个由`Observable.Return`创建的新可观察对象都创建了一个全新的线程，但`ObserveOn`确保了我的观察者的`OnNext`（以及在调用`OnCompleted`或`OnError`的情况下）通过指定的调度器被调用。
 
-### SubscribeOn and ObserveOn in UI applications
+### 在UI应用程序中使用SubscribeOn和ObserveOn
 
-If you're using Rx in a user interface, `ObserveOn` is useful when you are dealing with information sources that don't provide notifications on the UI thread. You can wrap any `IObservable<T>` with `ObserveOn`, passing a `SynchronizationContextScheduler` (or a framework-specific type such as `DispatcherScheduler`), to ensure that your observer receives notifications on the UI thread, making it safe to update the UI.
+如果你在用户界面中使用Rx，当你处理的信息源不在UI线程上提供通知时，`ObserveOn`非常有用。你可以用`ObserveOn`包装任何`IObservable<T>`，传递一个`SynchronizationContextScheduler`（或特定于框架的类型，如`DispatcherScheduler`），以确保你的观察者在UI线程上接收通知，这样可以安全地更新UI。
 
-`SubscribeOn` can also be useful in user interfaces as a way to ensure that any initialization work that an observable source does to get started does not happen on the UI thread.
+`SubscribeOn`在用户界面中也很有用，它可以确保可观察源进行初始化工作时不会在UI线程上进行。
 
-Most UI frameworks designate one particular thread for receiving notifications from the user and also for updating the UI, for any one window. It is critical to avoid blocking this UI thread, as doing so leads to a poor user experience—if you are doing work on the UI thread, it will be unavailable for responding to user input until that work is done. As a general rule, if you cause a user interface to become unresponsive for longer than 100ms, users will become irritated, so you should not be perform any work that will take longer than this on the UI thread. When Microsoft first introduced its application store (which came in with Windows 8) they specified an even more stringent limit: if your application blocked the UI thread for longer than 50ms, it might not be allowed into the store. With the processing power offered by modern processors, you can achieve a lot of processing 50ms. Even on the relatively low-powered processors in mobile devices that's long enough to execute millions of instructions. However, anything involving I/O (reading or writing files, or waiting for a response from any kind of network service) should not be done on the UI thread. The general pattern for creating responsive UI applications is:
+大多数UI框架指定一个特定线程来接收来自用户的通知以及更新UI，对于任何一个窗口来说，避免阻塞这个UI线程是至关重要的，因为这将导致糟糕的用户体验——如果你在UI线程上进行工作，它将无法响应用户输入，直到工作完成。一般来说，如果你导致用户界面无响应时间超过100ms，用户将会变得烦躁，所以你不应该在UI线程上执行任何超过这个时间的工作。当Microsoft首次引入其应用商店（随Windows 8推出）时，它们规定了一个更严格的限制：如果你的应用程序阻塞UI线程超过50ms，它可能不会被允许进入商店。随着现代处理器提供的处理能力，你可以在50ms内完成很多处理。即使在移动设备上相对低功率的处理器上，这也足以执行数百万条指令。不过，任何涉及I/O（读写文件或等待来自任何类型网络服务的响应）的事情都不应该在UI线程上完成。创建响应式UI应用程序的一般模式是：
 
-- receive a notification about some sort of user action
-- if slow work is required, do this on a background thread
-- pass the result back to the UI thread
-- update the UI
+- 接收关于某种用户操作的通知
+- 如果需要慢速工作，请在后台线程上进行
+- 将结果传回UI线程
+- 更新UI
 
-This is a great fit for Rx: responding to events, potentially composing multiple events, passing data to chained method calls. With the inclusion of scheduling, we even have the power to get off and back onto the UI thread for that responsive application feel that users demand.
+这非常适合Rx：响应事件，可能组合多个事件，将数据传递给链式方法调用。随着调度的加入，我们甚至有了在UI线程之外和回到UI线程上的能力，以实现用户所需的响应式应用感觉。
 
-Consider a WPF application that used Rx to populate an `ObservableCollection<T>`. You could use `SubscribeOn` to ensure that the main work was not done on the UI thread, followed by `ObserveOn` to ensure you were notified back on the correct thread. If you failed to use the `ObserveOn` method, then your `OnNext` handlers would be invoked on the same thread that raised the notification. In most UI frameworks, this would cause some sort of not-supported/cross-threading exception. In this example, we subscribe to a sequence of `Customers`. I'm using `Defer` so that if `GetCustomers` does any slow initial work before returning its `IObservable<Customer>`, that won't happen until we subscribe. We then use `SubscribeOn` to call that method and perform the subscription on a task pool thread. Then we ensure that as we receive `Customer` notifications, we add them to the `Customers` collection on the `Dispatcher`.
+考虑一个使用Rx来填充`ObservableCollection<T>`的WPF应用程序。你可以使用`SubscribeOn`确保主要工作不是在UI线程上完成的，接着使用`ObserveOn`确保你被通知回到正确的线程。如果你未使用`ObserveOn`方法，那么你的`OnNext`处理程序将在发出通知的同一个线程上被调用。在大多数UI框架中，这将导致某种不支持/跨线程异常。在这个例子中，我们订阅`Customers`序列。我使用`Defer`，这样如果`GetCustomers`在返回其`IObservable<Customer>`之前做了一些慢速的初始工作，这不会发生在我们订阅之前。然后我们使用`SubscribeOn`调用那个方法，并在任务池线程上执行订阅。然后我们确保当我们接收到`Customer`通知时，我们将它们添加到`Dispatcher`的`Customers`集合中。
 
 ```csharp
 Observable
@@ -631,21 +631,21 @@ Observable
     .Subscribe(Customers.Add);
 ```
 
-Rx also offers `SubscribeOnDispatcher()` and `ObserveOnDispatcher()` extension methods to `IObservable<T>`, that automatically use the current thread's `Dispatcher` (and equivalents for `CoreDispatcher`). While these might be slightly more convenient they can make it harder to test your code. We explain why in the [Testing Rx](16_TestingRx.md) chapter.
+Rx还为`IObservable<T>`提供了`SubscribeOnDispatcher()`和`ObserveOnDispatcher()`扩展方法，它们自动使用当前线程的`Dispatcher`（以及`CoreDispatcher`的等价物）。虽然这些可能稍微方便一些，但它们可能使你的代码更难测试。我们在[测试Rx](16_TestingRx.md)章节中解释了为什么。
 
-## Concurrency pitfalls
+## 并发的陷阱
 
-Introducing concurrency to your application will increase its complexity. If your application is not noticeably improved by adding a layer of concurrency, then you should avoid doing so. Concurrent applications can exhibit maintenance problems with symptoms surfacing in the areas of debugging, testing and refactoring.
+在您的应用程序中引入并发会增加其复杂性。如果通过添加并发层不能显著改善您的应用程序，那么您应该避免这样做。并发应用程序可能会展示出维护问题，其症状会在调试、测试和重构的领域中显现出来。
 
-The common problem that concurrency introduces is unpredictable timing. Unpredictable timing can be caused by variable load on a system, as well as variations in system configurations (e.g. varying core clock speed and availability of processors). These can ultimately can result in [deadlocks](http://en.wikipedia.org/wiki/Deadlock), [livelocks](http://en.wikipedia.org/wiki/Deadlock#Livelock) and corrupted state.
+并发引入的常见问题是不可预测的时间安排。不可预测的时间安排可能是由系统的变化负荷引起的，以及系统配置的变化（例如，不同的核心时钟速度和处理器的可用性）。这些最终可能会导致[死锁](http://en.wikipedia.org/wiki/Deadlock)、[活锁](http://en.wikipedia.org/wiki/Deadlock#Livelock)和状态损坏。
 
-A particularly significant danger of introducing concurrency to an application is that you can silently introduce bugs. Bugs arising from unpredictable timing are notoriously difficult to detect, making it easy for these kinds of defects to slip past Development, QA and UAT and only manifest themselves in Production environments. Rx, however, does such a good job of simplifying the concurrent processing of observable sequences that many of these concerns can be mitigated. You can still create problems, but if you follow the guidelines then you can feel a lot safer in the knowledge that you have heavily reduced the capacity for unwanted race conditions.
+引入并发到应用程序的一个特别显著的危险是你可以无声无息地引入错误。由不可预测的时间引起的错误是非常难以检测的，这使得这类缺陷很容易从开发、QA和UAT中溜过，只有在生产环境中才会显现出来。然而，Rx在简化可观察序列的并发处理方面做得很好，许多这些问题可以得到缓解。你仍然可以创建问题，但如果你遵循指南，你可以在知识上感觉更安全，因为你已经大大减少了不希望的竞态条件的可能性。
 
-In a later chapter, [Testing Rx](16_TestingRx.md), we will look at how Rx improves your ability to test concurrent workflows.
+在后面的章节，[测试Rx](16_TestingRx.md)，我们将看到Rx如何改善你测试并发工作流的能力。
 
-### Lock-ups
+### 锁住
 
-Rx can simplify handling of concurrency, but it is not immune deadlock. Some calls (like `First`, `Last`, `Single` and `ForEach`) are blocking—they do not return until something that they are waiting for occurs. The following example shows that this makes it very easy for deadlock to occur:
+Rx可以简化并发处理，但它并不免疫死锁。一些调用（如`First`、`Last`、`Single`和`ForEach`）是阻塞的——它们不会返回，直到它们等待的某些事情发生。以下示例表明，这使得死锁非常容易发生：
 
 ```csharp
 var sequence = new Subject<int>();
@@ -658,11 +658,11 @@ sequence.OnNext(1);
 Console.WriteLine("I can never execute....");
 ```
 
-The `First` method will not return until its source emits a sequence. But the code that causes this source to emit sequence is on the line _after_ the call to `First`. So the source can't emit a sequence until `First` returns. This style of deadlock, with two parties, each unable to proceed until the other proceeds, is often known as a _deadly embrace_. As this code shows, it's entirely possible for a deadly embrace to occur even in single threaded code. In fact, the single threaded nature of this code is what enables deadlock: we have two operations (waiting for the first notification, and sending the first notification) and only a single thread. That doesn't have to be a problem. If we'd used `FirstAsync` and attached an observer to that, `FirstAsync` would have executed its logic when the source `Subject<int>` invoked its `OnNext`. But that is more complex than just calling `First` and assigning the result into a variable.
+`First`方法将不会返回，直到其源发射一个序列。但是导致此源发射序列的代码位于调用`First`之后的行。因此，源在`First`返回之前无法发射序列。这种死锁的风格，有两方各自无法进行直到另一方进行，通常被称为_致命拥抱_。正如这段代码所示，即使在单线程代码中，也完全可能发生致命拥抱。事实上，这段代码的单线程特性是使死锁成为可能的原因：我们有两个操作（等待第一个通知和发送第一个通知），只有一条线程。这本不必是一个问题。如果我们使用了`FirstAsync`并将观察者附加到它上面，`FirstAsync`将在源`Subject<int>`调用其`OnNext`时执行其逻辑。但这比直接调用`First`并将结果赋值给一个变量更复杂。
 
-This is an oversimplified example to illustrate the behaviour, and we would never write such code in production. (And even if we did, it fails so quickly and consistently that we would immediately become aware of a problem.) But in real application code, these kinds of problems can be harder to spot. Race conditions often slip into the system at integration points, so the problem isn't necessarily evidence in any one piece of code: timing problems can emerge as a result of how we plug multiple pieces of code together.
+这是一个过于简化的示例，用于说明行为，并且我们永远不会在生产中编写这样的代码。（即使我们这样做了，它也会很快并一致地失败，我们将立即意识到问题。）但在实际应用程序代码中，这类问题可能更难发现。竞态条件常常在集成点悄然进入系统，所以问题并不一定在任何一段代码中明显：时序问题可能由于我们如何将多块代码拼接在一起而产生。
 
-The next example may be a little harder to detect, but is only small step away from our first, unrealistic example. The basic idea is that we've got a subject that represents button clicks in a user interface. Event handlers representing user input are invoked by the UI framework. We just provide the framework with event handler methods, and it calls them for us whenever the event of interest, such as a button being clicked, occurs. This code calls `First` on the subject representing clicks, but it's less obvious that this might cause a problem here than it was in the preceding example:
+接下来的例子可能更难检测，但只比我们第一个不切实际的例子稍难一点。基本思想是，我们有一个代表用户界面中按钮点击的主题。表示用户输入的事件处理程序由UI框架调用。我们只提供框架与事件处理方法，它会在感兴趣的事件发生时（如按钮被点击时）调用它们。这段代码在代表点击的主题上调用了`First`，但这里可能导致问题的可能性不像在前一个例子中那么明显：
 
 ```csharp
 public Window1()
@@ -671,11 +671,11 @@ public Window1()
     DataContext = this;
     Value = "Default value";
     
-    // Deadlock! We need the dispatcher to continue to allow me to click the button to produce a value
+    // 死锁！我们需要分派器继续允许我点击按钮以产生一个值
     Value = _subject.First();
     
-    // This will have the intended effect, but because it does not block,
-    // we can call this on the UI thread without deadlocking.
+    // 这将产生预期的效果，但由于它不会阻塞，
+    // 我们可以在UI线程上调用它而不会造成死锁。
     //_subject.FirstAsync(1).Subscribe(value => Value = value);
 }
 
@@ -695,19 +695,19 @@ public string Value
 }
 ```
 
-The earlier example called the subject's `OnNext` after `First` returned, making it relatively straightforward to see that if `First` didn't return, then the subject wouldn't emit a notification. But that's not as obvious here. The `MyButton_Click` event handler will be set up inside the call to `InitializeComponent` (as is normal in WPF code), so apparently we've done the necessary setup to enable events to flow. By the time we reach this call to `First`, the UI framework already knows that if the user clicks `MyButton`, it should call `MyButton_Click`, and that method is going to cause the subject to emit a value.
+早期的例子在`First`返回之后调用了主题的`OnNext`，相对容易看出如果`First`没有返回，那么主题就不会发出通知。但在这里并不那么明显。`MyButton_Click`事件处理程序将在调用`InitializeComponent`时设置（如WPF代码中常见），所以显然我们已经做了必要的设置以启动事件流。在我们到达这个调用`First`的地方时，UI框架已经知道，如果用户点击`MyButton`，它应该调用`MyButton_Click`，而该方法将导致主题发出一个值。
 
-There's nothing intrinsically wrong with that use of `First`. (Risky, yes, but there are scenarios in which that exact code would be absolutely fine.) The problem is the context in which we've used it. This code is in the constructor of a UI element, and these always run on a particular thread associated with that window's UI elements. (This happens to be a WPF example, but other UI frameworks work the same way.) And that's the same thread that the UI framework will use to deliver notifications about user input. If we block this UI thread, we prevent the UI framework from invoking our button click event handler. So this blocking call is waiting for an event that can only be raised from the very thread that it is blocking, thus creating a deadlock.
+使用`First`并没有本质上的错误。（有风险，是的，但在某些情况下这种准确的代码是绝对可以的。）问题是我们使用它的上下文。这段代码在UI元素的构造函数中，而这些总是在与该窗口的UI元素关联的特定线程上运行。（这恰好是一个WPF示例，但其他UI框架的工作方式也是一样的。）而这是同一个线程，UI框架将使用它来传递有关用户输入的通知。如果我们阻塞这个UI线程，我们就阻止了UI框架调用我们的按钮点击事件处理程序。因此，这种阻塞性调用等待的事件只能从它正在阻塞的线程中被触发，从而创造了一个死锁。
 
-You might be starting to get the impression that we should try to avoid blocking calls in Rx. This is a good rule of thumb. We can fix the code above by commenting out the line that uses `First`, and uncommenting the one below it containing this code:
+你可能开始觉得我们应该试图避免在Rx中使用阻塞性调用。这是一个好的经验法则。我们可以通过注释掉使用`First`的行，并取消下面这行中包含此代码的注释来修复上面的代码：
 
 ```csharp
 _subject.FirstAsync(1).Subscribe(value => Value = value);
 ```
 
-This uses `FirstAsync` which does the same job, but with a different approach. It implements the same logic but it returns an `IObservable<T>` to which we must subscribe if we want to receive the first value whenever it does eventually appear. It is more complex than the just assigning the result of `First` into the `Value` property, but it is better adapted to the fact that we can't know when that source will produce a value.
+这使用了`FirstAsync`，它完成同样的工作，但采用了不同的方法。它实现了相同的逻辑，但它返回一个`IObservable<T>`，我们必须订阅它，如果我们想在第一个值出现时接收到第一个值。这比只是将`First`的结果赋给`Value`属性更复杂，但它更适应于我们无法知道那个源何时会产生一个值的事实。
 
-If you do a lot of UI development, that last example might have seemed obviously wrong to you: we had code in the constructor for a window that wouldn't allow the constructor to complete until the user clicked a button in that window. The window isn't even going to appear until construction is complete so it makes no sense to wait for the user to click a button. That button's not even going to be visible on screen until after our constructor completes. Moreover, seasoned UI developers know that you don't just stop the world and wait for a specific action from the user. (Even modal dialogs, which effectively do demand a response before continuing, don't block the UI thread.) But as the next example shows, it's easy for problems to be harder to see. In this example, a button's click handler will try to get the first value from an observable sequence exposed via an interface.
+如果你进行了大量的UI开发，那么最后一个例子对你来说可能显然是错误的：我们在一个窗口的构造函数中编写了代码，这些代码不允许构造函数完成，直到用户点击该窗口中的一个按钮。直到构造完成，窗口甚至都不会出现，所以等待用户点击按钮是没有意义的。这个按钮在我们的构造函数完成之前甚至都不会在屏幕上可见。此外，经验丰富的UI开发人员知道，你不能只是停下来等待用户进行特定的操作。（即使是模态对话框，实际上也是要求在继续之前得到回应，也不会阻塞UI线程。）但正如下一个示例所示，问题可能更难看清。在这个例子中，按钮的单击处理程序将尝试从一个通过接口公开的可观察序列中获取第一个值。
 
 ```csharp
 public partial class Window1 : INotifyPropertyChanged
@@ -744,9 +744,9 @@ public partial class Window1 : INotifyPropertyChanged
 }
 ```
 
-Unlike the earlier example, this does not attempt to block progress in the constructor. The blocking call to `First` occurs here in a button click handler (the `MyButton2_Click` method near the end). This example is more interesting because this sort of thing isn't necessarily wrong. Applications often perform blocking operations in click handlers: when we click a button to save a copy of a document, we expect the application to perform all necessary IO work to write our data out to storage. With modern solid state storage devices, this often happens so quickly as to appear instantaneous, but back in the days when mechanical hard drives were the norm, it was not unusual for an application to become briefly unresponsive while it saved our document. This can happen even today if your storage is remote, and networking issues are causing delays.
+与前一个示例不同，这并没有试图在构造函数中阻塞进度。阻塞调用`First`发生在按钮点击处理程序（最后附近的`MyButton2_Click`方法）中。这个例子更有趣，因为这种情况并不一定错。应用程序经常在点击处理程序中执行阻塞操作：当我们点击按钮保存文档副本时，我们期望应用程序执行所有必要的IO工作将我们的数据写出到存储中。有了现代固态存储设备，这通常发生得如此之快以至于看起来是瞬间完成的，但在机械硬盘时代，当应用程序保存我们的文档时变得短暂无响应是不寻常的。即使今天，如果您的存储是远程的，并且网络问题正在造成延迟，这种情况也可能发生。
 
-So even if we've learned to be suspicious of blocking operations such as `First`, it's possible that it's OK in this example. It's not possible to tell for certain by looking at this code alone. It all depends on what sort of an observable `GetTemperature` returns, and the manner in which it produces its items. That call to `First` will block on the UI thread until a first item becomes available, so this will produce a deadlock if the production of that first item requires access to the UI thread. Here's a slightly contrived way to create that problem:
+因此，即使我们已经学会对诸如`First`之类的阻塞性操作持怀疑态度，它在这个示例中可能是可以的。仅凭查看这段代码本身并无法确定。这一切都取决于`GetTemperature`返回的observable是什么样的，以及它产生其项目的方式。那个调用`First`将会在UI线程阻塞，直到第一个条目变得可用，所以如果产生第一个条目需要访问UI线程，这将会产生死锁。这里有一种略显牵强的方法来创建这个问题：
 
 ```csharp
 class MyService : IMyService
@@ -766,41 +766,41 @@ class MyService : IMyService
 }
 ```
 
-This fakes up behaviour intended to simulate an actual temperature sensor by making a series of calls to `OnNext`. But it does some odd explicit scheduling: it calls `SubscribeOnDispatcher`. That's an extension method that effectively calls `SubscribeOn(DispatcherScheduler.Current.Dispatcher)`. This effectively tells Rx that when something tries to subscribe to the `IObservable<int>` that `GetTemperature` returns, that subscription call should be done through a WPF-specific scheduler that runs its work items on the UI thread. (Strictly, speaking, WPF does allow multiple UI threads, so to more precise, this code only works if you call it on a UI thread, and if you do so, the scheduler will ensure that work items are scheduled onto the same UI thread.)
+这仿造了预期模拟实际温度传感器的行为，通过进行一系列`OnNext`调用。但它做了一些奇特的显式调度：它调用`SubscribeOnDispatcher`。这是一个扩展方法，有效地调用`SubscribeOn(DispatcherScheduler.Current.Dispatcher)`。这实际上告诉Rx，当有人试图订阅`GetTemperature`返回的`IObservable<int>`时，这个订阅调用应该通过一个WPF特定的调度器在UI线程上执行。 （严格来说，WPF确实允许多个UI线程，所以更精确地说，这段代码只在你在UI线程上调用它时有效，如果这样的话，调度器将确保工作项被调度到同一个UI线程上。）
 
-The effect is that when our click handler calls `First`, that will in turn subscribe to the `IObservable<int>` returned by `GetTemperature`, and because that used `SubscribeOnDispatcher`, this does not invoke the callback passed to `Observable.Create` immediately. Instead, it schedules a work item that will do that when the UI thread (i.e., the thread we're running on) becomes free. It's not considered to be free right now, because it's in the middle of handling the button click. Having handed this work item to the scheduler, the `Subscribe` call returns back to the `First` method. And the `First` method now sits and waits for the first item to emerge. Since it won't return until that happens, the UI thread will not be considered to be available until that happens, meaning that the scheduled work item that was supposed to produce that first item can never run, and we have deadlock.
+当我们的点击处理程序调用`First`时，它会反过来订阅`GetTemperature`返回的`IObservable<int>`，因为那使用了`SubscribeOnDispatcher`，这不会立即调用传递给`Observable.Create`的回调。相反，它安排了一个工作项，将在UI线程（即我们正在运行的线程）变得空闲时执行。现在它不被认为是空闲的，因为它正在处理按钮点击。将这个工作项交给调度器后，`Subscribe`调用返回给`First`方法。`First`现在坐下来等待第一个条目出现。由于它不会返回直到那发生，UI线程将不被认为是可用的，直到那时，被安排的工作项才能运行，我们就有了死锁。
 
-This boils down to the same basic problem as the first of these `First`-related deadlock examples. We have two processes: the generation of items, and waiting for an item to occur. These need to be in progress concurrently—we need the "wait for first item" logic to be up and running at the point when the source emits its first item. These examples all use just a single thread, which makes it a bad idea to use a single blocking call (`First`) both to set up the process of watching for the first item, and also to wait for that to happen. But even though it was the same basic problem in all three cases, it became harder to see as the code became more complex. With real application code, it's often a lot harder than this to see the root causes of deadlocks.
+这归结为与第一个涉及`First`的死锁示例相同的基本问题。我们有两个过程：项目的生成和等待项目出现。这些需要同时进行——我们需要“等待第一个条目”的逻辑在源发出其第一个条目时正在运行。这些示例都只使用了一个线程，这使得使用单个阻塞性调用（`First`）既设置观察第一个条目的过程，也等待那发生是个坏主意。但即使在所有三种情况下都是相同的基本问题，随着代码变得更加复杂，它变得更难看出。在实际应用代码中，看到死锁的根本原因通常比这难得多。
 
-So far, this chapter may seem to say that concurrency is all doom and gloom by focusing on the problems you could face, and the fact that they are often hard to spot in practice; this is not the intent though. 
-Although adopting Rx can't magically avoid classic concurrency problems, Rx can make it easier to get it right, provided you follow these two rules.
+迄今为止，这一章可能似乎在说并发全部是厄运和阴暗，专注于你可能面临的问题，以及它们在实践中往往难以察觉的事实；然而这并不是意图。
+尽管采用Rx不能神奇地避免经典的并发问题，但如果你遵循以下两条规则，Rx可以使得正确处理它们变得更容易。
 
-- Only the top-level subscriber should make scheduling decisions
-- Avoid using blocking calls: e.g. `First`, `Last` and `Single`
+- 只有顶层订阅者应该做出调度决策
+- 避免使用阻塞性调用：例如`First`、`Last`和`Single`
 
-The last example came unstuck with one simple problem; the `GetTemperature` service was dictating the scheduling model when, really, it had no business doing so. Code representing a temperature sensor shouldn't need to know that I'm using a particular UI framework, and certainly shouldn't be unilaterally deciding that it is going to run certain work on a WPF user interface thread.
+最后一个例子因为一个简单的问题而失败；`GetTemperature`服务在实际上无权这样做时，决定了调度模型。代表温度传感器的代码不应该需要知道我正在使用特定的UI框架，当然也不应该单方面决定它将在WPF用户界面线程上运行某些工作。
 
-When getting started with Rx, it can be easy to convince yourself that baking scheduling decisions into lower layers is somehow being 'helpful'. "Look!" you might say. "Not only have I provided temperature readings, I've also made this automatically notify you on the UI thread, so you won't have to bother with `ObserveOn`." The intentions may be good, but it's all too easy to create a threading nightmare.
+开始使用Rx时，可能很容易说服自己将调度决策嵌入到较低层是在'有帮助'。你可能会说：“看！不仅我提供了温度读数，我还使它自动在UI线程上通知你，所以你不必费心使用`ObserveOn`。”意图可能是好的，但很容易造成线程噩梦。
 
-Only the code that sets up a subscription and consumes its results can have a complete overview of the concurrency requirements, so that is the right level at which to choose which schedulers to use. Lower levels of code should not try to get involved; they should just do what they are told. (Rx arguably breaks this rule slightly itself by choosing default schedulers where they are needed. But it makes very conservative choices designed to minimize the chances of deadlock, and always allows applications to take control by specifying the scheduler.)
+只有设置订阅并消费其结果的代码才能全面了解并发需求，所以这是选择哪些调度器使用的正确层级。较低层次的代码不应该试图介入；它们应该只是照做。 （Rx在某种程度上可能稍微违反了这个规则，通过选择在需要时使用默认调度器。但它做出了非常保守的选择，旨在最小化死锁的机会，并总是允许应用程序通过指定调度器来控制。）
 
-Note that following either one of the two rules above would have been sufficient to prevent deadlock in this example. But it is best to follow both rules.
+注意，遵循上述任何一条规则都足以防止这个例子中的死锁。但最好遵循两条规则。
 
-This does leave one question unanswered: _how_ should the top-level subscriber make scheduling decisions? I've identified the area of the code that needs to make the decision, but what should the decision be? It will depend on the kind of application you are writing. For UI code, this pattern generally works well: "Subscribe on a background thread; Observe on the UI thread". With UI code, the risk of deadlock arises in because the UI thread is effectively a shared resource, and contention for that resource can produce deadlock. So the strategy is to avoid requiring that resource as much as possible: work that doesn't need to be on the thread should not be on that thread, which is why performing subscription on a worker thread (e.g., by using the `TaskPoolScheduler`) reduces the risk of deadlock.
+这确实留下了一个未解答的问题：_怎样_ 顶层订阅者应该做出调度决策？我已经确定了需要做出决策的代码区域，但决策应该是什么？这将取决于你正在编写的应用程序类型。对于UI代码，这个模式通常效果很好："在后台线程上订阅；在UI线程上观察"。对于UI代码来说，死锁的风险在于，UI线程实际上是一个共享资源，对该资源的争用可以产生死锁。因此，策略是尽可能避免需要该资源：不需要在该线程上的工作不应该在该线程上进行，这就是为什么在工作线程上进行订阅（例如，使用`TaskPoolScheduler`）可以减少死锁的风险。
 
-It follows that if you have observable sources that decide when to produce events (e.g., timers, or sources representing inputs from external information feeds or devices) you would also want those to schedule work on worker threads. It is only when we need to update the user interface that we need our code to run on the UI thread, and so we defer that until the last possible moment by using `ObserveOn` in conjunction with a suitable UI-aware scheduler (such as the WPF `DispatcherScheduler`). If we have a complex Rx query made up out of multiple operators, this `ObserveOn` should come right at the end, just before we call `Subscribe` to attach the handler that will update the UI. This way, only the final step, the updating of the UI, will need access to the UI thread. By the time this runs, all complex processing will be complete, and so this should be able to run very quickly, relinquishing control of the UI thread almost immediately, improving application responsiveness, and lowering the risk of deadlock.
+如果你有可观察的来源决定何时产生事件（例如，计时器或代表来自外部信息来源或设备的输入的来源），你也会希望这些计划在工作线程上运行。只有当我们需要更新用户界面时，我们才需要我们的代码在UI线程上运行，因此我们通过使用`ObserveOn`与合适的UI感知调度器（如WPF `DispatcherScheduler`）一起延迟这一步，直到最后一刻。这样，只有最后一步，更新UI，将需要访问UI线程。在此运行时，所有复杂的处理都将完成，因此这应该能够非常快速地运行，几乎立即放弃对UI线程的控制，提高应用程序响应性，并降低死锁的风险。
 
-Other scenarios will require other strategies, but the general principle with deadlocks is always the same: understand which shared resources require exclusive access. For example, if you have a sensor library, it might create a dedicated thread to monitor devices and report new measurements, and if it were to stipulate that certain work had to be done on that thread, this would be very similar to the UI scenario: there is a particular thread that you will need to avoid blocking. The same approach would likely apply here. But this is not the only kind of scenario.
+其他场景将需要其他策略，但与死锁有关的一般原则始终相同：了解哪些共享资源需要独占访问。例如，如果你有一个传感器库，它可能会创建一个专用线程来监视设备并报告新的测量数据，如果它规定某些工作必须在该线程上完成，这将非常类似于UI场景：有一个特定的线程你需要避免阻塞。这里可能适用同样的方法。但这不是唯一的情况。
 
-You could imagine a data processing application in which certain data structures are shared. It's quite common in these cases to be allowed to access such data structures from any thread, but to be required to do so one thread at a time. Typically we would use thread synchronization primitives to protect against concurrent use of these critical data structures. In these cases, the risks of deadlock do not arise from the use of particular threads. Instead, they arise from the possibility that one thread can't progress because some other thread is using a shared data structure, but that other thread is waiting for the first thread to do something, and won't relinquish its lock on that data structure until that happens. The simplest way to avoid problems here is to avoid blocking wherever possible. Avoid methods like `First`, preferring their non-blocking equivalents such as `FirstAsync`. (If there are cases where you can't avoid blocking, try to avoid doing so while in possession of locks that guard access to shared data. And if you really can't avoid that either, then there are no simple answers. You'll now have to start thinking about lock hierarchies to systematically avoid deadlock, just as you would if you weren't using Rx.) The non-blocking style is the natural way to do things with Rx, and that's the main way Rx can help you avoid concurrency related problems in these cases.
+你可以想象一个数据处理应用程序，在这种情况下，某些数据结构是共享的。在这些情况下，通常允许从任何线程访问这些数据结构，但要求一次一个线程访问。通常我们会使用线程同步原语来防止这些关键数据结构的并发使用。在这些情况下，死锁的风险不是因为使用特定的线程。相反，它们来自于一个线程无法进展因为另一个线程正在使用一个共享数据结构，但那个线程正在等待第一个线程做些什么，并且在那发生之前不会释放它对那个数据结构的锁。这里避免问题的最简单方法是尽可能避免阻塞。避免像`First`这样的方法，转而使用它们的非阻塞等效项如`FirstAsync`。（如果有情况你无法避免阻塞，尽量避免在拥有保护访问共享数据的锁的同时这样做。而如果你真的无法避免这样做，那么也没有简单的答案。你现在必须开始考虑锁层次结构以系统地避免死锁，就像你不使用Rx一样。）非阻塞式是使用Rx的自然方式，这也是Rx在这些情况下帮助你避免与并发相关的问题的主要方式。
 
-## Advanced features of schedulers
+## 调度器的高级功能
 
-Schedulers provide some features that are mainly of interest when writing observable sources that need to interact with a scheduler. The most common way to use schedulers is when setting up a subscription, either supplying them as arguments when creating observable sources, or passing them to `SubscribeOn` and `ObserveOn`. But if you need to write an observable source that produces items on some schedule of its own choosing (e.g., suppose you are writing a library that represents some external data source and you want to present that as an `IObservable<T>`), you might need to use some of these more advanced features.
+调度器提供了一些主要在编写需要与调度器交互的可观察源时感兴趣的功能。使用调度器最常见的方式是在设置订阅时使用，要么在创建可观察源时将它们作为参数提供，要么将它们传递给 `SubscribeOn` 和 `ObserveOn`。但是，如果你需要编写一个可观察源，该源选择自己的调度产生项目（例如，假设你正在编写代表某些外部数据源的库，并且你想将其呈现为 `IObservable<T>`），你可能需要使用这些更高级的功能。
 
-### Passing state
+### 传递状态
 
-All of the methods defined by `IScheduler` take a `state` argument. Here's the interface definition again:
+`IScheduler` 定义的所有方法都接受一个 `state` 参数。这里再次给出接口定义：
 
 ```csharp
 public interface IScheduler
@@ -820,32 +820,32 @@ public interface IScheduler
 }
 ```
 
-The scheduler does not care what is in this `state` argument. It just passes it unmodified into your callback when it executes your work item. This provides one way to provide context for that callback. It's not strictly necessary: the delegate we pass as the `action` can incorporate whatever state we need. The easiest way to do that is to capture variables in a lambda. However, if you look at the [Rx source code](https://github.com/dotnet/reactive/) you will find that it typically doesn't do that. For example, the heart of the `Range` operator is a method called `LoopRec` and if you look at [the source for `LoopRec`](https://github.com/dotnet/reactive/blob/95d9ea9d2786f6ec49a051c5cff47dc42591e54f/Rx.NET/Source/src/System.Reactive/Linq/Observable/Range.cs#L55-L73) you'll see that it includes this line:
+调度器并不关心 `state` 参数中的内容。它只是在执行工作项时未经修改地将其传递给你的回调。这提供了一种为该回调提供上下文的方式。这并不是绝对必要的：我们传递的 `action` 委托可以包含我们需要的任何状态。做到这一点的最简单方法是在 lambda 中捕获变量。但是，如果你查看 [Rx 源代码](https://github.com/dotnet/reactive/)，你会发现它通常不这样做。例如，`Range` 操作符的核心是一个名为 `LoopRec` 的方法，如果你查看 [`LoopRec` 的源代码](https://github.com/dotnet/reactive/blob/95d9ea9d2786f6ec49a051c5cff47dc42591e54f/Rx.NET/Source/src/System.Reactive/Linq/Observable/Range.cs#L55-L73)，你会看到它包括以下这行：
 
 ```csharp
 var next = scheduler.Schedule(this, static (innerScheduler, @this) => @this.LoopRec(innerScheduler));
 ```
 
-Logically, `Range` is just a loop that executes once for each item it produces. But to enable concurrent execution and to avoid stack overflows, it implements this by scheduling each iteration of the loop as an individual work item. (The method is called `LoopRec` because it is logically a recursive loop: it is kicked off by calling `Schedule`, and each time the scheduler calls this method, it calls `Schedule` again to ask for the next item to run. This doesn't actually cause recursion with any of Rx's built-in schedulers, even the `ImmediateScheduler`, because they all detect this and arrange to run the next item after the current one returns. But if you wrote the most naive scheduler possible, this would actually end up recursing at runtime, likely leading to stack overflows if you tried to create a large sequence.)
+逻辑上，`Range` 只是一个循环，每产生一项就执行一次。但为了实现并发执行并避免栈溢出，它通过将循环的每次迭代安排为单独的工作项来实现这一点。（该方法被称为 `LoopRec`，因为它在逻辑上是一个递归循环：它通过调用 `Schedule` 启动，每次调度器调用这个方法时，它都会再次调用 `Schedule` 来请求执行下一项。这实际上并不会导致 Rx 的内置调度器发生递归，即使是 `ImmediateScheduler`，因为它们都会检测到这一点并安排在当前项返回后运行下一项。但是如果你编写了最简单的调度器，这实际上会在运行时导致递归，如果你试图创建一个大序列，很可能会导致栈溢出。）
 
-Notice that the lambda passed to `Schedule` has been annotated with `static`. This tells the C# compiler that it is our intention _not_ to capture any variables, and that any attempt to do so should cause a compiler error. The advantage of this is that the compiler is able to generate code that reuses the same delegate instance for every call. The first time this runs, it will create a delegate and store it in a hidden field. On every subsequent execution of this (either in future iterations of the same range, or for completely new range instances) it can just use that same delegate again and again and again. This is possible because the delegate captures no state. This avoids allocating a new object each time round the loop.
+注意传递给 `Schedule` 的 lambda 已经用 `static` 注释。这告诉 C# 编译器我们的意图是_不_捕获任何变量，任何尝试这样做的行为都应该导致编译错误。这样做的优点是编译器能够生成代码，重用每次调用的同一个委托实例。第一次运行时，它会创建一个委托并将其存储在一个隐藏字段中。在随后的执行中（无论是同一范围的未来迭代还是完全新的范围实例），它都可以一次又一次地使用同一个委托。这是因为委托不捕获任何状态。这避免了每次循环都分配一个新对象。
 
-Couldn't the Rx library have used a more straightforward approach? We could choose not to use the state, passing a `null` state to scheduler, and then discarding the state argument passed to our callback:
+Rx 库是否可以使用更直接的方法？我们可以选择不使用状态，向调度器传递一个 `null` 状态，然后在回调中丢弃传递给我们的状态参数：
 
 ```csharp
 // Less weird, but less efficient:
 var next = scheduler.Schedule<object?>(null, (innerScheduler, _) => LoopRec(innerScheduler));
 ```
 
-This avoids the previous example's weirdness of passing our own `this` argument: now we're just invoking the `LoopRec` instance member in the ordinary way: we're implicitly using the `this` reference that is in scope. So this will create a delegate the captures that implicit `this` reference. This works, but it's inefficient: it will force the compiler to generate code that allocates a couple of objects. It creates one object that has a field holding onto the captured `this`, and then it needs to create a distinct delegate instance that has a reference to that capture object.
+这避免了之前示例中传递我们自己的 `this` 参数的奇怪做法：现在我们以普通方式调用 `LoopRec` 实例成员：我们隐式使用了作用域中的 `this` 引用。所以这将创建一个捕获该隐式 `this` 引用的委托。这是有效的，但它效率低下：它将迫使编译器生成分配几个对象的代码。它创建一个持有捕获的 `this` 的字段的对象，然后需要创建一个持有对该捕获对象引用的独特委托实例。
 
-The more complex code that is actually in the `Range` implementation avoids this. It disables capture by annotating the lambda with `static`. That prevents code from relying on the implicit `this` reference. So it has had to arrange for the `this` reference to be available to the callback. And that's exactly the sort of thing the `state` argument is there for. It provides a way to pass in some per-work-item state so that you can avoid the overhead of capturing variables on each iteration.
+实际上 `Range` 实现中的更复杂代码避免了这一点。它通过用 `static` 注释 lambda 来禁用捕获。这防止了依赖隐式 `this` 引用的代码。所以它必须安排 `this` 引用对回调可用。这正是 `state` 参数存在的原因。它提供了一种传递每个工作项状态的方法，使你可以避免在每次迭代时捕获变量的开销。
 
-### Future scheduling
+### 未来的调度
 
-I talked earlier about time-based operators, and also about the two time-based members of `ISchedule` that enable this, but I've not yet shown how to use it. These enable you to schedule an action to be executed in the future. (This relies on the process continuing to run for as long as necessary. As mentioned in earlier chapters, `System.Reactive` doesn't support persistent, durable subscriptions. So if you want to schedule something for days into the future, you might want to look at [Reaqtor](https://reaqtive.net/).) You can do so by specifying the exact point in time an action should be invoked by calling the overload of `Schedule` that takes a `DateTimeOffset`, or you can specify the period of time to wait until the action is invoked with the `TimeSpan`-based overload.
+我之前谈到了基于时间的操作符，还谈到了 `ISchedule` 的两个基于时间的成员，这些成员实现了这一点，但我还没有展示如何使用它们。这些允许你安排未来某个时刻执行的动作。（这依赖于进程继续运行所需的时间。如前几章所述，`System.Reactive` 不支持持久的、持续的订阅。所以如果你想为未来几天安排某事，你可能想看看 [Reaqtor](https://reaqtive.net/)。）你可以通过调用接受 `DateTimeOffset` 的 `Schedule` 重载来指定动作应被调用的确切时间点，或者你可以通过使用基于 `TimeSpan` 的重载来指定等待动作被调用的时间段。
 
-You can use the `TimeSpan` overload like this:
+你可以像这样使用 `TimeSpan` 重载：
 
 ```csharp
 var delay = TimeSpan.FromSeconds(1);
@@ -855,7 +855,7 @@ scheduler.Schedule(delay, () => Console.WriteLine("Inside schedule at {0:o}", Da
 Console.WriteLine("After schedule at  {0:o}", DateTime.Now);
 ```
 
-Output:
+输出：
 
 ```
 Before schedule at 2012-01-01T12:00:00.000000+00:00
@@ -863,13 +863,13 @@ After schedule at 2012-01-01T12:00:00.058000+00:00
 Inside schedule at 2012-01-01T12:00:01.044000+00:00
 ```
 
-This illustrates that scheduling was non-blocking here, because the 'before' and 'after' calls are very close together in time. (It will be this way for most schedulers, but as discussed earlier, `ImmediateScheduler` works differently. In this case, you would see the After message after the Inside one. that's why none of the timed operators will use `ImmediateScheduler` by default.) You can also see that approximately one second after the action was scheduled, it was invoked.
+这说明了调度在这里是非阻塞的，因为“前”和“后”的调用在时间上非常接近。（对于大多数调度器都是这样，但如前所述，`ImmediateScheduler` 的工作方式不同。在这种情况下，你会在“Inside”之后看到“After”消息。这就是为什么没有定时操作符默认使用 `ImmediateScheduler` 的原因。）你还可以看到，大约一秒钟后，动作被调用。
 
-You can specify a specific point in time to schedule the task with the `DateTimeOffset` overload. If, for some reason, the point in time you specify is in the past, then the action is scheduled as soon as possible. Be aware that changes in the system clock complicate matters. Rx's schedulers do make some accommodations to deal with clock drift, but sudden large changes to the system clock can cause some short term chaos.
+你可以使用 `DateTimeOffset` 重载来指定安排任务的特定时间点。如果出于某种原因，你指定的时间点在过去，则会尽快安排该动作。要注意系统时钟的变化会使事情复杂化。Rx 的调度器确实做了一些调整以应对时钟漂移，但系统时钟的突然大变化可能会造成一些短期的混乱。
 
-### Cancellation
+### 取消
 
-Each of the overloads to `Schedule` returns an `IDisposable`, and calling `Dispose` on this will cancel the scheduled work. In the previous example, we scheduled work to be invoked in one second. We could cancel that work by disposing of the return value.
+每个 `Schedule` 的重载都返回一个 `IDisposable`，调用 `Dispose` 会取消已安排的工作。在前面的例子中，我们安排了一秒后调用的工作。我们可以通过处理返回值来取消这项工作。
 
 ```csharp
 var delay = TimeSpan.FromSeconds(1);
@@ -883,20 +883,20 @@ Console.WriteLine("After schedule at  {0:o}", DateTime.Now);
 workItem.Dispose();
 ```
 
-Output:
+输出：
 
 ```
 Before schedule at 2012-01-01T12:00:00.000000+00:00
 After schedule at 2012-01-01T12:00:00.058000+00:00
 ```
 
-Note that the scheduled action never occurred, because we cancelled it almost immediately.
+注意，由于我们几乎立即取消了它，所以预定的动作从未发生。
 
-When the user cancels the scheduled action method before the scheduler is able to invoke it, that action is just removed from the queue of work. This is what we see in example above. It's possible to cancel scheduled work that is already running, and this is why the work item callback is required to return `IDisposable`: if work has already begun when you try to cancel the work item, Rx calls `Dispose` on the `IDisposable` that your work item callback returned. This gives a way for users to cancel out of a job that may already be running. This job could be some sort of I/O, heavy computations or perhaps usage of `Task` to perform some work.
+当用户在调度器能够调用它之前取消预定的动作方法时，该动作只是从工作队列中移除。这就是我们在上面的例子中看到的情况。可以取消已经正在运行的计划工作，这就是为什么工作项回调需要返回 `IDisposable` 的原因：如果在你试图取消工作项时工作已经开始，Rx 会调用你的工作项回调返回的 `IDisposable` 的 `Dispose` 方法。这为用户提供了一种取消可能已经在运行的工作的方式。这项工作可能是某种 I/O、繁重计算或可能使用 `Task` 来执行某些工作。
 
-You may be wondering how this mechanism can be any use: the work item callback needs to have returned already for Rx to be able to invoke the `IDisposable` that it returns. This mechanism can only be used in practice if work continues after returning to the scheduler. You could fire up another thread so the work happens concurrently, although we generally try to avoid creating threads in Rx. Another possibility would be if the scheduled work item invoked some asynchronous API and returned without waiting for it to complete. If that API offered cancellation, you could return an `IDisposable` that cancelled it.
+你可能想知道这种机制如何有用：工作项回调需要已经返回，Rx 才能调用它返回的 `IDisposable`。这种机制只有在工作在返回给调度器后继续进行时才能实际使用。你可以启动另一个线程，这样工作就可以并行进行，尽管我们通常尽量避免在 Rx 中创建线程。另一种可能性是，如果计划的工作项调用了某个异步 API 并在不等待其完成的情况下返回，则你可以返回一个取消它的 `IDisposable`。
 
-To illustrate cancellation in operation, this slightly unrealistic example runs some work as a `Task` to enable it to continue after our callback returns. It just fakes some work by performing a spin wait and adding values to the `list` argument. The key here is that we create a `CancellationToken` to be able to tell the task we want it to stop, and we return an `IDisposable` that puts this token in to a cancelled state.
+为了说明取消操作，这个略显不切实际的例子将一些工作作为 `Task` 运行，以使其在我们的回调返回后继续进行。它只是通过执行旋转等待和将值添加到 `list` 参数来伪造一些工作。这里的关键是我们创建了一个 `CancellationToken` 以便能够告诉任务我们希望它停止，并且我们返回一个将此令牌置于取消状态的 `IDisposable`。
 
 ```csharp
 public IDisposable Work(IScheduler scheduler, List<int> list)
@@ -934,7 +934,7 @@ public IDisposable Work(IScheduler scheduler, List<int> list)
 }
 ```
 
-This code schedules the above code and allows the user to cancel the processing work by pressing Enter
+这段代码调度上述代码，并允许用户通过按 Enter 取消处理工作：
 
 ```csharp
 List<int> list = new();
@@ -950,7 +950,7 @@ token.Dispose();
 Console.WriteLine("Cancelled");
 ```
 
-Output:
+输出：
 
 ```
 Enter to quit:
@@ -960,11 +960,11 @@ Cancelled
 Cancellation requested
 ```
 
-The problem here is that we have introduced explicit use of `Task` so we are increasing concurrency in a way that is outside of the control of the scheduler. The Rx library generally allows control over the way in which concurrency is introduced by accepting a scheduler parameter. If the goal is to enable long-running iterative work, we can avoid having to spin up new threads or tasks but using Rx recursive scheduler features instead. I already talked a bit about this in the [Passing state](#passing-state) section, but there are a few ways to go about it.
+这里的问题是，我们引入了显式使用 `Task`，因此我们以一种调度器无法控制的方式增加了并发。Rx 库通常允许通过接受调度器参数控制并发的方式。如果目标是启用长时间运行的迭代工作，我们可以避免启动新线程或任务，而使用 Rx 的递归调度器功能。我已经在[传递状态](#passing-state)一节中稍微谈到过这个话题，但有几种方法可以做到这一点。
 
-### Recursion
+### 递归
 
-In addition to the `IScheduler` methods, Rx defines various overloads of `Schedule` in the form of extension methods. Some of these take some strange looking delegates as parameters. Take special note of the final parameter in each of these overloads of the `Schedule` extension method.
+除了 `IScheduler` 方法外，Rx 还定义了以扩展方法形式的 `Schedule` 的各种重载。其中一些参数采用了一些看起来很奇怪的委托。特别注意这些 `Schedule` 扩展方法重载中的最后一个参数。
 
 ```csharp
 public static IDisposable Schedule(
@@ -1004,9 +1004,9 @@ public static IDisposable Schedule<TState>(
 {...}   
 ```
 
-Each of these overloads take a delegate "action" that allows you to call "action" recursively. This may seem a very odd signature, but it allows us to achieve a similar logically recursive iterative approach as you saw in [Passing state](#passing-state) section, but in a potentially simpler way.
+这些重载中的每一个都接受一个委托“动作”，允许你递归地调用“动作”。这可能看起来是一个非常奇怪的签名，但它允许我们以类似于你在[传递状态](#passing-state)部分看到的逻辑上递归的迭代方法实现，但可能以一种更简单的方式。
 
-This example uses the simplest recursive overload. We have an `Action` that can be called recursively.
+这个例子使用最简单的递归重载。我们有一个可以递归调用的 `Action`。
 
 ```csharp
 Action<Action> work = (Action self) =>
@@ -1025,7 +1025,7 @@ token.Dispose();
 Console.WriteLine("Cancelled");
 ```
 
-Output:
+输出：
 
 ```
 Enter to quit:
@@ -1038,10 +1038,10 @@ Cancelled
 Running
 ```
 
-Note that we didn't have to write any cancellation code in our delegate. Rx handled the looping and checked for cancellation on our behalf. Since each individual iteration was scheduled as a separate work item, there are no long-running jobs, so it's enough to let the scheduler deal entirely with cancellation.
+注意我们没有在委托中编写任何取消代码。Rx 代表我们处理了循环并检查了取消。由于每个单独的迭代都被安排为单独的工作项，没有长时间运行的工作，所以让调度器完全处理取消就足够了。
 
-The main difference between these overloads, and using the `IScheduler` methods directly, is that you don't need to pass another callback directly into the scheduler. You just invoke the supplied `Action` and it schedules another call to your method. They also enable you not to pass a state argument if you don't have any use for one.
+这些重载与直接使用 `IScheduler` 方法的主要区别在于，你不需要直接将另一个回调传递给调度器。你只需调用提供的 `Action`，它将安排对你的方法的另一次调用。它们还使你无需传递状态参数，就可以不使用任何状态参数。
 
-As mentioned in the earlier section, although this logically represents recursion, Rx protects us from stack overflows. The schedulers implement this style of recursion by waiting for the method to return before performing the recursive call.
-    
-This concludes our tour of scheduling and threading. Next, we will look at the related topic of timing.
+正如之前部分所提到的，尽管这在逻辑上代表递归，Rx 保护我们免受栈溢出的影响。调度器通过等待方法返回再执行递归调用来实现这种递归风格的调度。
+
+这结束了我们关于调度和线程的探讨。接下来，我们将看看与此相关的计时主题。
