@@ -1,7 +1,7 @@
-# PART 3 - Getting pragmatic.
+# 第3部分 - 实用主义
 
-The first part of this book focused on the basic ideas and types of Rx. In the second part, I showed the operators Rx offers, enabling us to define the transformations and computations we want to apply to our source data. This second part was essentially functional programming. Rx's operators are mostly like mathematical functions, in that they will invariably behave in the same way for particular inputs. They are unaffected by the state of the world around them, and they also do nothing to change its state. In functional programming, such mechanisms are sometimes described as _pure_.
+本书的第一部分集中介绍了Rx的基本概念和类型。在第二部分，我展示了Rx提供的操作符，使我们能够定义要应用于源数据的转换和计算。这第二部分本质上是函数式编程。Rx的操作符大多类似数学函数，对于特定的输入，它们总是以相同的方式表现。它们不受周围世界状态的影响，也不会改变其状态。在函数式编程中，这样的机制有时被描述为_纯净的_。
 
-This _purity_ can help us understand what our code will do. It means we don't need to know about the state of the rest of our program in order to understand how one particular part functions. However, code that is completely detached from the outside world is unlikely to achieve anything useful. In practice, we need to connect these pure computations with more pragmatic concerns. The [Creating Observable Sequences chapter](03_CreatingObservableSequences.md) already showed how to define observable streams, so we've already looked at how to connect real world inputs into the world of Rx. But what about the other end? How do we do something useful with the results of our processing?
+这种_纯净性_可以帮助我们理解代码将要做什么。这意味着我们不需要知道程序其余部分的状态，就能理解特定部分是如何工作的。然而，完全与外部世界脱节的代码不太可能实现任何有用的功能。在实践中，我们需要将这些纯计算与更实用的关注点联系起来。[创建可观察序列章节](03_CreatingObservableSequences.md)已经展示了如何定义可观察流，因此我们已经研究了如何将真实世界的输入连接到Rx的世界中。但是其他端呢？我们如何利用我们处理的结果做一些有用的事情呢？
 
-In some cases, it might be enough to do work inside `IObserver` implementations, or using the callback-based subscription mechanisms you've already seen. However, some situations will demand something more sophisticated. So in this third part of the book, we will look at some of the features Rx offers to help connect processes of the kind we looked at in part 2 with the rest of the world.
+在某些情况下，可能仅在`IObserver`实现中或使用您已经看到的基于回调的订阅机制内进行工作就足够了。然而，一些情况可能需要更复杂的做法。因此，在本书的第三部分，我们将探讨一些Rx提供的功能，以帮助将我们在第2部分中查看的那种过程与世界其余部分连接起来。
