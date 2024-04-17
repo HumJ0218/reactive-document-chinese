@@ -1,12 +1,12 @@
-# Publishing operators
+# 发布操作符
 
-Hot sources need to be able to deliver events to multiple subscribers. While we can implement the subscriber tracking ourselves, it can be easier to write an oversimplified source that works only for a single subscriber. And although that won't be a full implementation of `IObservable<T>`, that won't matter if we then use one of Rx's _multicast_ operators to publish it as a multi-subscriber hot source. The example in ["Representing Filesystem Events in Rx"](03_CreatingObservableSequences.md#representing-filesystem-events-in-rx) used this trick, but as you'll see in this chapter there are a few variations on the theme.
+热源需要能够将事件传递给多个订阅者。虽然我们可以自己实现订阅者跟踪，但编写一个只适用于单个订阅者的过于简化的源可能会更容易。虽然这不会是`IObservable<T>`的完整实现，但如果我们随后使用Rx的一个_多播_操作符将其发布为多订阅者热源，那就无关紧要了。在["表示文件系统事件的Rx"](03_CreatingObservableSequences.md#representing-filesystem-events-in-rx)中使用了这个技巧，但正如你在本章中将看到的，这个主题有一些变体。
 
-## Multicast
+## 多播
 
-Rx offers three operators enabling us to support multiple subscribers using just a single subscription to some underlying source: [`Publish`](#publish), [`PublishLast`](#publishlast), and [`Replay`](#replay). All three of these are wrappers around Rx's `Multicast` operator, which provides the common mechanism at the heart of all of them.
+Rx提供了三个操作符，使我们能够仅使用对某个底层源的单一订阅来支持多个订阅者：[`Publish`](#publish)、[`PublishLast`](#publishlast) 和 [`Replay`](#replay)。这三个都是围绕Rx的`Multicast`操作符的包装器，它提供了它们所有的共同机制。
 
-`Multicast` turns any `IObservable<T>` into an `IConnectableObservable<T>` which, as you can see, just adds a `Connect` method:
+`Multicast`将任何`IObservable<T>`变为一个`IConnectableObservable<T>`，正如你所见，它只是增加了一个`Connect`方法：
 
 ```csharp
 public interface IConnectableObservable<out T> : IObservable<T>
@@ -15,7 +15,7 @@ public interface IConnectableObservable<out T> : IObservable<T>
 }
 ```
 
-Since it derives from `IObservable<T>`, you can call `Subscribe` on an `IConnectableObservable<T>`, but the implementation returned by `Multicast` won't call `Subscribe` on the underlying source when you do that. It only calls `Subscribe` on the underlying source when you call `Connect`. So that we can see this in action, let's define a source that prints out a message each time `Subscribe` is called:
+由于它派生自`IObservable<T>`，你可以在`IConnectableObservable<T>`上调用`Subscribe`，但`Multicast`返回的实现在你这样做时不会调用底层源的`Subscribe`。它只在你调用`Connect`时才调用底层源的`Subscribe`。为了让我们能看到这一点，让我们定义一个每次调用`Subscribe`时都会打印出消息的源：
 
 ```csharp
 IObservable<int> src = Observable.Create<int>(obs =>
@@ -28,13 +28,13 @@ IObservable<int> src = Observable.Create<int>(obs =>
 });
 ```
 
-Since this is only going to be invoked once no matter how many observers subscribe, `Multicast` can't pass on the `IObserver<T>`s handed to its own `Subscribe` method, because there could be any number of them. It uses a [Subject](03_CreatingObservableSequences.md#subjectt) as the single `IObserver<T>` that is passes to the underlying source, and this subject is also responsible for keeping track of all subscribers. If we call `Multicast` directly, we are required to pass in the subject we want to use:
+由于这只会被调用一次，不管有多少观察者订阅，`Multicast`无法传递给它自己的`Subscribe`方法的`IObserver<T>`，因为它们可能有任意数量。它使用[Subject](03_CreatingObservableSequences.md#subjectt)作为传递给底层源的单一`IObserver<T>`，这个subject还负责跟踪所有订阅者。如果我们直接调用`Multicast`，我们需要传入我们想要使用的subject：
 
 ```csharp
 IConnectableObservable<int> m = src.Multicast(new Subject<int>());
 ```
 
-We can now subscribe to this a few times over:
+我们现在可以多次订阅这个：
 
 ```csharp
 m.Subscribe(x => Console.WriteLine($"Sub1: {x}"));
@@ -42,15 +42,15 @@ m.Subscribe(x => Console.WriteLine($"Sub2: {x}"));
 m.Subscribe(x => Console.WriteLine($"Sub3: {x}"));
 ```
 
-None of these subscribers will receive anything unless we call `Connect`:
+除非我们调用`Connect`，否则这些订阅者都不会收到任何东西：
 
 ```csharp
 m.Connect();
 ```
 
-**Note**: `Connect` returns an `IDisposable`. Calling `Dispose` on that unsubscribes from the underlying source.
+**注意**：`Connect`返回一个`IDisposable`。调用该对象的`Dispose`会取消订阅底层来源。
 
-This call to `Connect` causes the following output:
+这次调用`Connect`产生了以下输出：
 
 ```csharp
 Create callback called
@@ -62,9 +62,9 @@ Sub2: 2
 Sub3: 2
 ```
 
-As you can see, the method we passed to `Create` runs only once, confirming that `Multicast` did only subscribe once, despite us calling `Subscribe` three times over. But each item went to all three subscriptions.
+正如你所看到的，我们传递给`Create`的方法只运行了一次，确认`Multicast`确实只订阅了一次，尽管我们已经调用了`Subscribe`三次。但是每个项目都传递给了所有三个订阅。
 
-The way `Multicast` works is fairly straightforward: it gets the subject do most of the work. Whenever you call `Subscribe` on an observable returned by `Multicast`, it just calls `Subscribe` on the subject. And when you call `Connect`, it just passes the subject into the underlying source's `Subscribe`. So this code would have had the same effect:
+`Multicast`的工作方式相当简单：它让subject完成大部分工作。每当你在`Multicast`返回的可观察对象上调用`Subscribe`时，它只是调用subject的`Subscribe`。当你调用`Connect`时，它只是将subject传递给底层源的`Subscribe`。所以这段代码会产生相同的效果：
 
 ```csharp
 var s = new Subject<int>();
@@ -76,18 +76,18 @@ s.Subscribe(x => Console.WriteLine($"Sub3: {x}"));
 src.Subscribe(s);
 ```
 
-However, an advantage of `Multicast` is that it returns `IConnectableObservable<T>`, and as we'll see later, some other parts of Rx know how to work with this interface.
+然而，`Multicast`的一个优点是它返回`IConnectableObservable<T>`，正如我们稍后将看到的，Rx的一些其他部分知道如何与这个接口一起工作。
 
-`Multicast` offers an overload that works in a quite different way: it is intended for scenarios where you want to write a query that uses its source observable twice. For example, we might want to get adjacent pairs of items using `Zip`:
+`Multicast`提供了一个以完全不同方式工作的重载版本：它适用于你想要编写一个查询，该查询使用其源`observable`两次的场景。例如，我们可能想使用`Zip`获得相邻的项目对：
 
 ```csharp
 IObservable<(int, int)> ps = src.Zip(src.Skip(1));
 ps.Subscribe(ps => Console.WriteLine(ps));
 ```
 
-(Although [`Buffer`](08_Partitioning.md#buffer) might seem like a more obvious way to do this, one advantage of this `Zip` approach is that it will never give us half of a pair. When we ask `Buffer` for pairs, it will give us a single-item buffer when we reach the end, which can require extra code to work around.)
+(虽然[`Buffer`](08_Partitioning.md#buffer)看起来像是一个更明显的方法来做这件事，但这种`Zip`方法的一个优点是它永远不会给我们一半的对。当我们要求`Buffer`给我们对时，它会在我们到达尽头时给我们一个单项缓冲区，这可能需要额外的代码来解决问题。)
 
-The problem with this approach is that the source will see two subscriptions: one directly from `Zip`, and then a second one through `Skip`. If we were to run the code above, we'd see this output:
+使用这种方法的问题是，源将看到两个订阅：一个直接来自`Zip`，然后通过`Skip`的第二个。如果我们运行上面的代码，我们会看到这个输出：
 
 ```
 Create callback called
@@ -95,41 +95,41 @@ Create callback called
 (1, 2)
 ```
 
-Our `Create` callback ran twice. The second `Multicast` overload lets us avoid that:
+我们的`Create`回调运行了两次。第二个`Multicast`重载让我们避免了这个问题：
 
 ```csharp
 IObservable<(int, int)> ps = src.Multicast(() => new Subject<int>(), s => s.Zip(s.Skip(1)));
 ps.Subscribe(ps => Console.WriteLine(ps));
 ```
 
-As the output shows, this avoids the multiple subscriptions:
+如输出所示，这避免了多个订阅：
 
 ```csharp
 Create callback called
 (1, 2)
 ```
 
-This overload of `Multicast` returns a normal `IObservable<T>`. This means we don't need to call `Connect`. But it also means that each subscription to the resulting `IObservable<T>` causes a subscription to the underlying source. But for the scenario it is designed for this is fine: we're just trying to avoid getting twice as many subscriptions to the underlying source.
+这个`Multicast`重载返回一个普通的`IObservable<T>`。这意味着我们不需要调用`Connect`。但这也意味着，对结果`IObservable<T>`的每个订阅都会导致对底层来源的一个订阅。但对于它设计的场景来说这是可以的：我们只是试图避免对底层来源进行两倍的订阅。
 
-The remaining operators defined in this section, `Publish`, `PublishLast`, and `Replay`, are all wrappers around `Multicast`, each supplying a specific type of subject for you.
+在这一节中定义的其余操作符，`Publish`、`PublishLast`和`Replay`，都是围绕`Multicast`的包装器，每一个都为你提供了一种特定类型的subject。
 
 ### Publish
 
-The `Publish` operator calls `Multicast` with a [`Subject<T>`](03_CreatingObservableSequences.md#subjectt). The effect of this is that once you have called `Connect` on the result, any items produced by the source will be delivered to all subscribers. This enables me to replace this earlier example:
+`Publish`操作符使用[`Subject<T>`](03_CreatingObservableSequences.md#subjectt)调用`Multicast`。这样做的效果是，一旦你在结果上调用了`Connect`，源产生的任何项目都会被传递给所有订阅者。这使我能够将这个较早的例子：
 
 ```csharp
 IConnectableObservable<int> m = src.Multicast(new Subject<int>());
 ```
 
-with this:
+替换为这个：
 
 ```csharp
 IConnectableObservable<int> m = src.Publish();
 ```
 
-These are exactly equivalent.
+这两者完全等效。
 
-Because `Subject<T>` forwards all incoming `OnNext` calls to each of its subscribers immediately, and because it doesn't store any previously made calls, the result is a hot source. If you attach some subscribers before calling `Connect`, and then you attached more subscribers after calling `Connect`, those later subscribers will only receive events that occurred after they subscribed. This example demonstrates that:
+因为`Subject<T>`立即将所有传入的`OnNext`调用转发给它的每个订阅者，并且因为它不存储之前做出的任何调用，所以结果是一个热源。如果你在调用`Connect`之前附加了一些订阅者，然后在调用`Connect`之后附加了更多订阅者，那么那些较晚的订阅者只会收到在他们订阅后发生的事件。这个例子演示了这一点：
 
 ```csharp
 IConnectableObservable<long> publishedTicks = Observable
@@ -150,7 +150,7 @@ publishedTicks.Subscribe(x => Console.WriteLine($"Sub3: {x} ({DateTime.Now})"));
 publishedTicks.Subscribe(x => Console.WriteLine($"Sub4: {x} ({DateTime.Now})"));
 ```
 
-The following output shows that we only see output for the Sub3 and Sub4 subscriptions for the final 2 events:
+以下输出显示，我们只看到了Sub3和Sub4订阅的最后两个事件的输出：
 
 ```
 Sub1: 0 (10/08/2023 16:04:02)
@@ -170,25 +170,25 @@ Sub3: 3 (10/08/2023 16:04:05)
 Sub4: 3 (10/08/2023 16:04:05)
 ```
 
-As with [`Multicast`](#multicast), `Publish` offers an overload that provides per-top-level-subscription multicast. This lets us simplify the example from the end of that section from this:
+与[`Multicast`](#multicast)一样，`Publish`提供了一个提供每个顶层订阅多播的重载。这让我们能够简化该节末尾的示例，从这个：
 
 ```csharp
 IObservable<(int, int)> ps = src.Multicast(() => new Subject<int>(), s => s.Zip(s.Skip(1)));
 ps.Subscribe(ps => Console.WriteLine(ps));
 ```
 
-to this:
+变为这个：
 
 ```csharp
 IObservable<(int, int)> ps = src.Publish(s => s.Zip(s.Skip(1)));
 ps.Subscribe(ps => Console.WriteLine(ps));
 ```
 
-`Publish` offers overloads that let you specify an initial value. These use [`BehaviorSubject<T>`](03_CreatingObservableSequences.md#behaviorsubjectt) instead of `Subject<T>`. The difference here is that all subscribers will immediately receive a value as soon as they subscribe. If the underlying source hasn't yet produced an item (or if `Connect` hasn't been called, meaning we've not even subscribed to the source yet) they will receive the initial value. And if at least one item has been received from the source, any new subscribers will instantly receive the latest value the source produced, and will then go on to receive any further new values.
+`Publish`提供了允许你指定初始值的重载。这些使用[`BehaviorSubject<T>`](03_CreatingObservableSequences.md#behaviorsubjectt)而不是`Subject<T>`。这里的区别是，所有订阅者将立即在他们订阅时收到一个值。如果底层来源尚未产生一个项目（或者如果没有调用`Connect`，意味着我们甚至还没有订阅来源），他们将收到初始值。如果至少收到了来自来源的一个项目，任何新的订阅者将立即收到来源产生的最新值，然后继续收到任何进一步的新值。
 
 ### PublishLast
 
-The `PublishLast` operator calls `Multicast` with an [`AsyncSubject<T>`](03_CreatingObservableSequences.md#asyncsubjectt). The effect of this is that the final item produced by the source will be delivered to all subscribers. You still need to call `Connect`. This determines when subscription to the underlying source occurs. But all subscribers will receive the final event regardless of when they subscribe, because `AsyncSubject<T>` remembers the final result. We can see this in action with the following example:
+`PublishLast`操作符使用[`AsyncSubject<T>`](03_CreatingObservableSequences.md#asyncsubjectt)调用`Multicast`。这样做的效果是，源产生的最后一个项目将被传递给所有订阅者。你仍然需要调用`Connect`。这决定何时订阅底层来源。但所有订阅者都将收到最终事件，无论他们何时订阅，因为`AsyncSubject<T>`记住了最终结果。我们可以通过以下示例看到这一点：
 
 ```csharp
 IConnectableObservable<long> pticks = Observable
@@ -209,7 +209,7 @@ pticks.Subscribe(x => Console.WriteLine($"Sub3: {x} ({DateTime.Now})"));
 pticks.Subscribe(x => Console.WriteLine($"Sub4: {x} ({DateTime.Now})"));
 ```
 
-This creates a source that produces 4 values in the space of 0.4 seconds. It attaches a couple of subscribers to the `IConnectableObservable<T>` returned by `PublishLast` and then immediately calls `Connect`. Then it sleeps for 1 second, which gives the source time to complete. This means that those first two subscribers will receive the one and only value they will ever receive (the last value in the sequence) before that call to `Thread.Sleep` returns. But we then go on to attach two more subscribers. As the output shows, these also receive that same final event:
+这创建了一个在0.4秒内产生4个值的源。它附上一对订阅者到由`PublishLast`返回的`IConnectableObservable<T>`，然后立即调用`Connect`。然后它睡眠1秒，这给了源时间来完成。这意味着那前两个订阅者将收到他们将收到的唯一值（序列中的最后值）在那次调用`Thread.Sleep`返回之前。但我们随后又附加了两个更多的订阅者。如输出所示，这些也接收到了同一最终事件：
 
 ```
 Sub1: 3 (11/14/2023 9:15:46 AM)
@@ -221,13 +221,13 @@ Sub3: 3 (11/14/2023 9:15:49 AM)
 Sub4: 3 (11/14/2023 9:15:49 AM)
 ```
 
-These last two subscribers receive the value later because they subscribed later, but the `AsyncSubject<T>` created by `PublishLast` is just replaying the final value it received to these late subscribers.
+这最后两个订阅者因为他们订阅晚了所以接收到值晚了，但是由`PublishLast`创建的`AsyncSubject<T>`只是在这些晚到的订阅者中重放了其已接收到的最终值。
 
 ### Replay
 
-The `Replay` operator calls `Multicast` with a [`ReplaySubject<T>`](03_CreatingObservableSequences.md#replaysubjectt). The effect of this is that any subscribers attached before calling `Connect` just receive all events as the underlying source produces them, but any subscribers attached later effectively get to 'catch up', because the `ReplaySubject<T>` remembers events it has already seen, and replays them to new subscribers.
+`Replay`操作符使用[`ReplaySubject<T>`](03_CreatingObservableSequences.md#replaysubjectt)调用`Multicast`。这样做的效果是，在调用`Connect`之前附加的任何订阅者只收到底层源产生的所有事件，但任何稍后附加的订阅者实际上可以'赶上'，因为`ReplaySubject<T>`记住了它已经看到的事件，并将这些事件重放给新订阅者。
 
-This example is very similar to the one used for `Publish`:
+这个示例与用于`Publish`的非常相似：
 
 ```csharp
 IConnectableObservable<long> pticks = Observable
@@ -248,7 +248,7 @@ pticks.Subscribe(x => Console.WriteLine($"Sub3: {x} ({DateTime.Now})"));
 pticks.Subscribe(x => Console.WriteLine($"Sub4: {x} ({DateTime.Now})"));
 ```
 
-This creates a source that will produce items regularly for 4 seconds. It attaches two subscribers before calling `Connect`. It then waits long enough for the first two events to emerge before attaching two more subscribers. But unlike with `Publish`, those late subscribers will see the events that happened before they subscribed:
+这创建了一个将在4秒内定期产生项目的源。它在调用`Connect`之前附加了两个订阅者。然后它等待足够长的时间以便第一和第二事件发生之前继续附加两个更多的订阅者。但与`Publish`不同，那些晚来的订阅者将看到他们订阅之前发生的事件：
 
 ```
 Sub1: 0 (10/08/2023 16:18:22)
@@ -272,22 +272,22 @@ Sub3: 3 (10/08/2023 16:18:25)
 Sub4: 3 (10/08/2023 16:18:25)
 ```
 
-They receive them late of course, because they subscribed late. So we see a quick flurry of events reported as `Sub3` and `Sub4` catch up, but once they have caught up, they then receive all further events immediately.
+他们当然是晚收到这些事件的，因为他们晚订阅的。所以我们看到`Sub3`和`Sub4`在赶上时迅速报告了一连串的事件，但一旦他们赶上了，他们就会立即收到所有进一步的事件。
 
-The `ReplaySubject<T>` that enables this behaviour will consume memory to store events. As you may recall, this subject type can be configured to store only a limited number of events, or not to hold onto events older than some specified time limit. The `Replay` operator provides overloads that enable you to configure these kinds of limits.
+使这种行为成为可能的`ReplaySubject<T>`会消耗内存来存储事件。正如你可能记得的，这种subject类型可以配置为仅存储有限数量的事件，或者不保留早于某个指定时间限制的事件。`Replay`操作符提供了允许你配置这些类型限制的重载。
 
-`Replay` also supports the per-subscription-multicast model I showed for the other `Multicast`-based operators in this section.
+`Replay`也支持我为此部分中其他基于`Multicast`的操作符展示的每个订阅多播模型。
 
 ## RefCount
 
-We saw in the preceding section that `Multicast` (and also its various wrappers) supports two usage models:
+我们在前一节中看到了`Multicast`（以及其各种包装器）支持两种使用模型：
 
-* returning an `IConnectableObservable<T>` to allow top-level control of when subscription to the underlying source occurs
-* returning an ordinary `IObservable<T>`, enabling us to avoid unnecessary multiple subscriptions to the source when using a query that uses the source in multiple places (e.g., `s.Zip(s.Take(1))`), but still making one `Subscribe` call to the underlying source for each top-level `Subscribe`
+* 返回一个`IConnectableObservable<T>`，以允许顶层控制何时发生对底层来源的订阅
+* 返回一个普通的`IObservable<T>`，使我们能够避免在使用源的多个地方（例如`s.Zip(s.Take(1))`）的查询中进行不必要的多个订阅，但仍然对每个顶层`Subscribe`进行一次底层来源的`Subscribe`调用
 
-`RefCount` offers a slightly different model. It enables subscription to the underlying source to be triggered by an ordinary `Subscribe`, but can still make just a single call to the underlying source. This might be useful in the AIS example used throughout this book. You might want to attach multiple subscribers to an observable source that reports the location messages broadcast by ships and other vessels, but you would normally want a library presenting an Rx-based API for this to connect only once to any underlying service providing those messages. And you would most likely want it to connect only when at least one subscriber is listening. `RefCount` would be ideal for this because it enables a single source to support multiple subscribers, and for the underlying source to know when we move between the "no subscribers" and "at least one subscriber" states.
+`RefCount`提供了一个略有不同的模型。它使订阅到底层来源可以通过普通的`Subscribe`触发，但仍然只进行一次对底层来源的调用。在整本书中使用的AIS示例中，这可能会很有用。你可能希望将多个订阅者附加到报告船只和其他船舶广播的定位消息的可观察源，但你通常希望为此提供Rx-based API的库只连接一次到提供这些消息的任何底层服务。而且你很可能希望它只在至少有一个订阅者在监听时才连接。`RefCount`非常适合于此，因为它使单个来源能够支持多个订阅者，并使底层来源知道我们何时从“没有订阅者”状态转变为“至少有一个订阅者”状态。
 
-To be able to observe how `RefCount` operators, I'm going to use a modified version of the source that reports when subscription occurs:
+为了能够观察到`RefCount`的操作，我将使用一个修改版本的源，该源报告何时发生订阅：
 
 ```csharp
 IObservable<int> src = Observable.Create<int>(async obs =>
@@ -305,7 +305,7 @@ IObservable<int> src = Observable.Create<int>(async obs =>
 });
 ```
 
-Unlike the earlier example, this uses `async` and delays between each `OnNext` to ensure that the main thread has time to set up multiple subscriptions before all the items are produced. We can then wrap this with `RefCount`:
+与早期示例不同，这使用了`async`并在每个`OnNext`之间延迟，以确保主线程有时间在所有项目生成之前设置多个订阅。然后我们可以用`RefCount`封装这个：
 
 ```csharp
 IObservable<int> rc = src
@@ -313,7 +313,7 @@ IObservable<int> rc = src
     .RefCount();
 ```
 
-Notice that I have to call `Publish` first. This is because `RefCount` expects an `IConnectableObservable<T>`. It wants to start the source only when something first subscribes. It will call `Connect` as soon as there's at least one subscriber. Let's try it:
+注意我首先必须调用`Publish`。这是因为`RefCount`期望一个`IConnectableObservable<T>`。它希望在第一次有东西订阅时启动源。它会在至少有一个订阅者时调用`Connect`。让我们尝试一下：
 
 ```csharp
 rc.Subscribe(x => Console.WriteLine($"Sub1: {x} ({DateTime.Now})"));
@@ -326,7 +326,7 @@ rc.Subscribe(x => Console.WriteLine($"Sub3: {x} ({DateTime.Now})"));
 rc.Subscribe(x => Console.WriteLine($"Sub4: {x} ({DateTime.Now})"));
 ```
 
-Here's the output:
+这里是输出：
 
 ```
 Create callback called
@@ -344,9 +344,9 @@ Sub3: 4 (10/08/2023 16:36:45)
 Sub4: 4 (10/08/2023 16:36:45)
 ```
 
-Notice that only `Sub1` receives the very first event. That's because the callback passed to `Create` produces that immediately. Only when it invokes its first `await` does it return to the caller, enabling us to attach the second subscriber. That has already missed the first event, but as you can see it receives the 2nd and 3rd. The code waits long enough for the first three events to occur before attaching two more subscribers, and you can see that all four subscribers receive the final event.
+注意只有`Sub1`收到了第一个事件。那是因为传递给`Create`的回调立即产生了它。只有当它调用第一个`await`时，它才返回给调用者，使我们能够附加第二个订阅者。那已经错过了第一个事件，但正如你可以看到的，它接收到了第二和第三个事件。代码等待足够长的时间让前三个事件发生在附加两个更多的订阅者之前，你可以看到所有四个订阅者都接收到了最后的事件。
 
-As the name suggests `RefCount` counts the number of active subscribers. If this ever drops to 0, it will call `Dispose` on the object that `Connect` returned, shutting down the subscription. If further subscribers attach, it will restart. This example shows that:
+正如名称所示，`RefCount`计算活跃订阅者的数量。如果这个数字曾经降至0，它将调用`Connect`返回的对象的`Dispose`，关闭订阅。如果后来有更多的订阅者加入，它将重新启动。这个示例显示了这一点：
 
 ```csharp
 IDisposable s1 = rc.Subscribe(x => Console.WriteLine($"Sub1: {x} ({DateTime.Now})"));
@@ -367,7 +367,7 @@ rc.Subscribe(x => Console.WriteLine($"Sub3: {x} ({DateTime.Now})"));
 rc.Subscribe(x => Console.WriteLine($"Sub4: {x} ({DateTime.Now})"));
 ```
 
-We get this output:
+我们得到了这个输出：
 
 ```
 Create callback called
@@ -392,12 +392,12 @@ Sub3: 4 (10/08/2023 16:40:41)
 Sub4: 4 (10/08/2023 16:40:41)
 ```
 
-This time, the `Create` callback ran twice. That's because the number of active subscribers dropped to 0, so `RefCount` called `Dispose` to shut things down. When new subscribers came along, it called `Connect` again to start things back up. There are some overloads enabling you to specify a `disconnectDelay`. This tells it to wait for the specified time after the number of subscribers drops to zero before disconnecting, to see if any new subscribers come along. But it will still disconnect if the specified time elapses. If that's not what you want, the next operator might be for you.
+这一次，`Create`回调运行了两次。那是因为活跃订阅者的数量降至0，所以`RefCount`调用了`Dispose`来关闭事务。当新的订阅者出现时，它再次调用`Connect`来重新启动事务。有一些重载允许你指定一个`disconnectDelay`。这会告诉它在订阅者数量降至零后等待指定的时间再断开连接，以查看是否有新的订阶订阅者出现。但如果指定的时间过去了，它还是会断开连接。如果这不是你想要的，下一个操作符可能适合你。
 
 ## AutoConnect
 
-The `AutoConnect` operator behaves in much the same way as `RefCount`, in that it calls `Connect` on its underlying `IConnectableObservable<T>` when the first subscriber subscribers. The difference is that it doesn't attempt to detect when the number of active subscribers has dropped to zero: once it connects, it remains connected indefinitely, even if it has no subscribers.
+`AutoConnect`操作符的行为与`RefCount`非常相似，即在第一个订阅者订阅时就在其底层的`IConnectableObservable<T>`上调用`Connect`。不同之处在于它不试图检测活跃订阅者的数量是否已降至零：一旦它连接，它将无限期地保持连接，即使它没有订阅者。
 
-Although `AutoConnect` can be convenient, you need to be a little careful, because it can cause leaks: it will never disconnect automatically. It is still possible to tear down the connection it creates: `AutoConnect` accepts an optional argument of type `Action<IDisposable>`. It invokes this when it first connects to the source, passing you the `IDisposable` returned by the source's `Connect` method. You can shut it down by calling `Dispose`.
+尽管`AutoConnect`可能很方便，你需要小心一点，因为它可以导致泄漏：它永远不会自动断开连接。拆除它创建的连接仍然是可能的：`AutoConnect`接受一个可选的`Action<IDisposable>`类型参数。当它首次连接到源时，它会调用这个，将源的`Connect`方法返回的`IDisposable`传递给你。你可以通过调用`Dispose`来关闭它。
 
-The operators in this chapter can be useful whenever you have a source that is not well suited do dealing with multiple subscribers. It provides various ways to attach multiple subscribers while only triggering a single `Subscribe` to the underlying source.
+本章中的操作符在你有一个不适合处理多个订阅者的源时可能很有用。它提供了各种方式来附加多个订阅者，同时只触发对底层来源的单一`Subscribe`。

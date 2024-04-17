@@ -1,18 +1,18 @@
-# Testing Rx
+# 测试 Rx.NET
 
-Modern quality assurance standards demand comprehensive automated testing that can help evaluate and prevent bugs. It is good practice to have a suite of tests that verify correct behaviour and to run this as part of the build process to detect regressions early.
+现代质量保证标准要求广泛的自动化测试，以帮助评估和预防缺陷。开发一套测试套件来验证正确的行为并将其作为构建过程的一部分运行，以便及早发现回归是一个好习惯。
 
-The `System.Reactive` source code includes a comprehensive tests suite. Testing Rx-based code presents some challenges, especially when time-sensitive operators are involved. Rx.NET's test suite includes many tests designed to exercise awkward edge cases to ensure predictable behaviour under load. This is only possible because Rx.NET was designed to be testable.
+`System.Reactive` 源代码包含了一个全面的测试套件。测试基于 Rx 的代码提出了一些挑战，特别是涉及时间敏感操作符时。Rx.NET 的测试套件包括许多设计用来处理棘手的边缘情况的测试，以确保在负载下的可预测行为。这只是因为 Rx.NET 被设计为可测试的。
 
-In this chapter, we'll show how you can take advantage of Rx's testability in your own code.
+在本章中，我们将展示如何利用 Rx 的可测试性在您自己的代码中。
 
-## Virtual Time
+## 虚拟时间
 
-It's common to deal with timing in Rx. As you've seen, it offers several operators that take time into account, and this presents a challenge. We don't want to introduce slow tests, because that can make test suites take too long to execute, but how might we test an application that waits for the user to stop typing for half a second before submitting a query? Non-deterministic tests can also be a problem: when there are race conditions it can be very hard to recreate these reliably.
+在 Rx 中处理时间是常见的。正如您所见，它提供了几个考虑时间的操作符，并且这呈现了一个挑战。我们不想引入慢速测试，因为这可能会使测试套件花费太长时间执行，但我们如何测试一个应用程序等待用户停止输入半秒再提交查询的情况呢？不确定性测试也可能是一个问题：当存在竞态条件时，可靠地重新创建这些情况可能非常困难。
 
-The [Scheduling and Threading](11_SchedulingAndThreading.md) chapter described how schedulers use a virtualized representation of time. This is critical for enabling tests to validate time-related behaviour. It lets us control Rx's perception of the progression of time, enabling us to write tests that logically take seconds, but which execute in microseconds.
+[Scheduling and Threading](11_SchedulingAndThreading.md) 章节描述了调度器如何使用虚拟时间的表现。这对于使测试能够验证与时间相关的行为至关重要。它让我们可以控制 Rx 对时间进展的感知，使我们能够编写逻辑上需要几秒钟，但实际上在微秒内执行的测试。
 
-Consider this example, where we create a sequence that publishes values every second for five seconds.
+考虑这个例子，我们创建一个每秒发布值持续五秒的序列。
 
 ```csharp
 IObservable<long> interval = Observable
@@ -20,7 +20,7 @@ IObservable<long> interval = Observable
     .Take(5);
 ```
 
-A naive a test to ensure that this produces five values at one second intervals would take five seconds to run. That would be no good; we want hundreds if not thousands of tests to run in five seconds. Another very common requirement is to test a timeout. Here, we try to test a timeout of one minute.
+一个简单的测试来确保这生成每秒间隔的五个值将需要五秒钟来运行。那可不行；我们想要数百甚至数千个测试在五秒钟内运行。另一个非常普遍的需求是测试超时。在这里，我们尝试测试一分钟的超时。
 
 ```csharp
 var never = Observable.Never<int>();
@@ -34,30 +34,30 @@ never.Timeout(TimeSpan.FromMinutes(1))
 Assert.IsTrue(exceptionThrown);
 ```
 
-It looks like we would have no choice but to make our test wait for a minute before running that assert. In practice, we'd want to wait a little over a minute, because if the computer running the test is busy, it might trigger the timeout bit later than we've asked. This kind of scenario is notorious for causing tests to fail occasionally even when there's no real problem in the code being tested.
+看起来我们别无选择，只能让我们的测试等待一分钟再进行断言。实际上，我们可能想等待一分钟多一点，因为如果运行测试的计算机忙碌，可能稍后触发超时。这种情况臭名昭著，有时即使代码没有真正的问题，测试也会偶尔失败。
 
-Nobody wants slow, inconsistent tests. So let's look at how Rx helps us to avoid these problems.
+没有人想要慢速、不一致的测试。所以，让我们看看 Rx 如何帮助我们避免这些问题。
 
 ## TestScheduler
 
-The [Scheduling and Threading](11_SchedulingAndThreading.md) chapter explained that schedulers determine when and how to execute code, and that they keep track of time. Most of the schedulers we looked at in that chapter addressed various threading concerns, and when it came to timing, they all attempted to run work at the time requested. But Rx provides `TestScheduler`, which handles time completely differently. It takes advantage of the fact that schedulers control all time-related behaviour to allow us to emulate and control time.
+[Scheduling and Threading](11_SchedulingAndThreading.md) 章节解释了调度器决定何时以及如何执行代码，以及它们如何跟踪时间。我们在那一章中看到的大多数调度器处理各种线程问题，并且在计时方面，它们都试图在请求的时间运行工作。但 Rx 提供了 `TestScheduler`，它完全不同地处理时间。它利用调度器控制所有与时间相关的行为的事实，让我们能够模拟和控制时间。
 
-**Note:** `TestScheduler` is not in the main `System.Reactive` package. You will need to add a reference to `Microsoft.Reactive.Testing` to use it.
+**注意：** `TestScheduler` 不在主 `System.Reactive` 包中。您需要添加对 `Microsoft.Reactive.Testing` 的引用才能使用它。
 
-Any scheduler maintains a queue of actions to be executed. Each action is assigned a point in time when it should be executed. (Sometimes that time is "as soon as possible" but time-based operators will often schedule work to run at some specific time in the future.) If we use the `TestScheduler` it will effectively act as though time stands still until we tell it we want time to move on.
+任何调度器都维护一个要执行的动作队列。每个动作都被指定一个执行时的时间点。（有时这个时间是“尽快”，但基于时间的操作符通常会安排工作在将来的某个具体时间运行。）如果我们使用 `TestScheduler`，它将实际上表现得好像时间静止直到我们告诉它我们想让时间继续前进。
 
-In this example, we schedule a task to be run immediately by using the simplest `Schedule` overload. Even though this effectively asks for the work to be run as soon as possible, the `TestScheduler` always waits for us to tell it we're ready before processing newly queued work. We advance the virtual clock forward by one tick, at which point it will execute that queued work. (It runs all newly-queued "as soon as possible" work any time we advance the virtual time. If we advance the time far enough to mean that work that was previously logically in the future is now runnable, it runs that too.)
+在这个例子中，我们使用最简单的 `Schedule` 重载来安排一个立即运行的任务。尽管这有效地要求工作尽快运行，`TestScheduler` 总是等我们告诉它我们准备好了才处理新排队的工作。我们将虚拟时钟向前推进一个时刻，此时它将执行该排队工作。（每当我们推进虚拟时间时，它都运行所有新排队的“尽快”工作。如果我们推进时间足够远，意味着以前在逻辑上是未来的工作现在可以运行，它也会运行那些工作。）
 
 ```csharp
 var scheduler = new TestScheduler();
 var wasExecuted = false;
 scheduler.Schedule(() => wasExecuted = true);
 Assert.IsFalse(wasExecuted);
-scheduler.AdvanceBy(1); // execute 1 tick of queued actions
+scheduler.AdvanceBy(1); // 执行 1 个时刻的排队动作
 Assert.IsTrue(wasExecuted);
 ```
 
-The `TestScheduler` implements the `IScheduler` interface and also defines methods allowing us to control and monitor virtual time. This shows these additional methods:
+`TestScheduler` 实现了 `IScheduler` 接口，还定义了允许我们控制和监视虚拟时间的方法。这显示了这些额外的方法：
 
 ```csharp
 public class TestScheduler : // ...
@@ -73,15 +73,15 @@ public class TestScheduler : // ...
 }
 ```
 
-`TestScheduler` works in the same units as [`TimeSpan.Ticks`](https://learn.microsoft.com/en-us/dotnet/api/system.timespan.ticks). If you want to move time forward by 1 second, you can call `scheduler.AdvanceBy(TimeSpan.FromSeconds(1).Ticks)`. One tick corresponds to 100ns, so 1 second is 10,000,000 ticks.
+`TestScheduler` 以 [`TimeSpan.Ticks`](https://learn.microsoft.com/en-us/dotnet/api/system.timespan.ticks) 为单位工作。如果你想将时间向前推进 1 秒，你可以调用 `scheduler.AdvanceBy(TimeSpan.FromSeconds(1).Ticks)`。一刻对应于 100 纳秒，因此 1 秒是 10,000,000 刻。
 
 ### AdvanceTo
 
-The `AdvanceTo(long)` method sets the virtual time to the specified number of ticks. This will execute all the actions that have been scheduled up to that absolute time specified. The `TestScheduler` uses ticks as its measurement of time. In this example, we schedule actions to be invoked now, in 10 ticks, and in 20 ticks (1 and 2 microseconds respectively).
+`AdvanceTo(long)` 方法将虚拟时间设置为指定的刻数。这将执行所有已安排到该绝对时间的动作。`TestScheduler` 使用刻作为其时间测量单位。在这个例子中，我们安排动作立即执行，以及在 10 刻和 20 刻（分别为 1 微秒和 2 微秒）执行。
 
 ```csharp
 var scheduler = new TestScheduler();
-scheduler.Schedule(() => Console.WriteLine("A")); // Schedule immediately
+scheduler.Schedule(() => Console.WriteLine("A")); // 立即安排
 scheduler.Schedule(TimeSpan.FromTicks(10), () => Console.WriteLine("B"));
 scheduler.Schedule(TimeSpan.FromTicks(20), () => Console.WriteLine("C"));
 
@@ -98,7 +98,7 @@ Console.WriteLine("scheduler.AdvanceTo(20);");
 scheduler.AdvanceTo(20);
 ```
 
-Output:
+输出：
 
 ```
 scheduler.AdvanceTo(1);
@@ -110,15 +110,15 @@ scheduler.AdvanceTo(20);
 C
 ```
 
-Note that nothing happened when we advanced to 15 ticks. All work scheduled before 15 ticks had been performed and we had not advanced far enough yet to get to the next scheduled action.
+注意当我们推进到 15 刻时没有发生任何事情。所有在 15 刻之前安排的工作已经完成，我们还没有推进到可以执行下一个安排动作的时间。
 
 ### AdvanceBy
-    
-The `AdvanceBy(long)` method allows us to move the clock forward by some amount of time. Unlike `AdvanceTo`, the argument here is relative to the current virtual time. Again, the measurements are in ticks. We can take the last example and modify it to use `AdvanceBy(long)`.
+
+`AdvanceBy(long)` 方法允许我们将时钟向前推进一定时间量。与 `AdvanceTo` 不同，这里的参数是相对于当前虚拟时间的。再次，测量单位是刻。我们可以采用最后的例子并将其修改为使用 `AdvanceBy(long)`。
 
 ```csharp
 var scheduler = new TestScheduler();
-scheduler.Schedule(() => Console.WriteLine("A")); // Schedule immediately
+scheduler.Schedule(() => Console.WriteLine("A")); // 立即安排
 scheduler.Schedule(TimeSpan.FromTicks(10), () => Console.WriteLine("B"));
 scheduler.Schedule(TimeSpan.FromTicks(20), () => Console.WriteLine("C"));
 
@@ -135,7 +135,7 @@ Console.WriteLine("scheduler.AdvanceBy(5);");
 scheduler.AdvanceBy(5);
 ```
 
-Output:
+输出：
 
 ```
 scheduler.AdvanceBy(1);
@@ -148,12 +148,12 @@ C
 ```
 
 ### Start
-    
-The `TestScheduler`'s `Start()` method runs everything that has been scheduled, advancing virtual time as necessary for work items that were queued for a specific time. We take the same example again and swap out the `AdvanceBy(long)` calls for a single `Start()` call.
+
+`TestScheduler` 的 `Start()` 方法运行已经安排的所有事务，必要时推进虚拟时间来执行被安排到特定时间的工作项。我们使用相同的例子，将 `AdvanceBy(long)` 调用换成单个 `Start()` 调用。
 
 ```csharp
 var scheduler = new TestScheduler();
-scheduler.Schedule(() => Console.WriteLine("A")); // Schedule immediately
+scheduler.Schedule(() => Console.WriteLine("A")); // 立即安排
 scheduler.Schedule(TimeSpan.FromTicks(10), () => Console.WriteLine("B"));
 scheduler.Schedule(TimeSpan.FromTicks(20), () => Console.WriteLine("C"));
 
@@ -163,7 +163,7 @@ scheduler.Start();
 Console.WriteLine("scheduler.Clock:{0}", scheduler.Clock);
 ```
 
-Output:
+输出：
 
 ```
 scheduler.Start();
@@ -173,9 +173,9 @@ C
 scheduler.Clock:20
 ```
 
-Note that once all of the scheduled actions have been executed, the virtual clock matches our last scheduled item (20 ticks).
+注意，当所有安排的动作都被执行后，虚拟时钟与我们最后安排的项目（20 刻）匹配。
 
-We further extend our example by scheduling a new action to happen after `Start()` has already been called.
+我们进一步扩展我们的例子，安排一个在 `Start()` 已经被调用后才发生的新动作。
 
 ```csharp
 var scheduler = new TestScheduler();
@@ -191,7 +191,7 @@ Console.WriteLine("scheduler.Clock:{0}", scheduler.Clock);
 scheduler.Schedule(() => Console.WriteLine("D"));
 ```
 
-Output:
+输出：
 
 ```
 scheduler.Start();
@@ -201,13 +201,13 @@ C
 scheduler.Clock:20
 ```
 
-Note that the output is exactly the same; If we want our fourth action to be executed, we will have to call `Start()` (or `AdvanceTo` or `AdvanceBy`) again.
+注意输出完全相同；如果我们想要执行我们的第四个动作，我们将不得不再次调用 `Start()`（或 `AdvanceTo` 或 `AdvanceBy`）。
 
 ### Stop
 
-There is a `Stop()` method whose name seems to imply some symmetry with `Start()`. This sets the scheduler's `IsEnabled` property to false, and if `Start` is currently running, this means that it will stop inspecting the queue for further work, and will return as soon as the work item currently being processed completes.
+有一个名为 `Stop()` 的方法，其名称似乎暗示了与 `Start()` 的某种对称性。这会将调度器的 `IsEnabled` 属性设置为 false，并且如果 `Start` 当前正在运行，这意味着它将停止检查队列中的进一步工作，并在当前正在处理的工作项完成后立即返回。
 
-In this example, we show how you could use `Stop()` to pause processing of scheduled actions.
+在这个例子中，我们展示了如何使用 `Stop()` 暂停安排动作的处理。
 
 ```csharp
 var scheduler = new TestScheduler();
@@ -221,7 +221,7 @@ scheduler.Start();
 Console.WriteLine("scheduler.Clock:{0}", scheduler.Clock);
 ```
 
-Output:
+输出：
 
 ```
 scheduler.Start();
@@ -230,13 +230,13 @@ B
 scheduler.Clock:15
 ```
 
-Note that "C" never gets printed as we stop the clock at 15 ticks.
+注意，"C" 没有被打印出来，因为我们在 15 刻停止了时钟。
 
-Since `Start` automatically stops when it has drained the work queue, you're under no obligation to call `Stop`. It's there only if you want to call `Start` but then pause processing part way through the test.
+由于 `Start` 自动停止，当它耗尽工作队列时，你并不一定要调用 `Stop`。它存在的只是为了在测试过程中部分完成时暂停 `Start` 的处理。
 
-### Schedule collision
+### 安排冲突
 
-When scheduling actions, it is possible and even likely that many actions will be scheduled for the same point in time. This most commonly would occur when scheduling multiple actions for _now_. It could also happen that there are multiple actions scheduled for the same point in the future. The `TestScheduler` has a simple way to deal with this. When actions are scheduled, they are marked with the clock time they are scheduled for. If multiple items are scheduled for the same point in time, they are queued in order that they were scheduled; when the clock advances, all items for that point in time are executed in the order that they were scheduled.
+当安排动作时，很可能会有许多动作被安排在同一时刻。这通常会发生在为 _现在_ 安排多个动作时。这也可能发生在预定未来同一时刻的多个动作时。`TestScheduler` 有一个简单的方法来处理这种情况。当动作被安排时，它们会被标记为它们被安排的时钟时间。如果多个项目被安排在同一时刻，它们会按照它们被安排的顺序排队；当时钟推进时，所有该时刻的项目都会按照它们被安排的顺序执行。
 
 ```csharp
 var scheduler = new TestScheduler();
@@ -249,7 +249,7 @@ scheduler.Start();
 Console.WriteLine("scheduler.Clock:{0}", scheduler.Clock);
 ```
 
-Output:
+输出：
 
 ```
 scheduler.AdvanceTo(10);
@@ -259,11 +259,11 @@ C
 scheduler.Clock:10
 ```
 
-Note that the virtual clock is at 10 ticks, the time we advanced to.
+注意虚拟时钟是在 10 刻，我们推进到的时间。
 
-## Testing Rx code
+## 测试 Rx 代码
 
-Now that we have learnt a little bit about the `TestScheduler`, let's look at how we could use it to test our two initial code snippets that use `Interval` and `Timeout`. We want to execute tests as fast as possible but still maintain the semantics of time. In this example we generate our five values one second apart but pass in our `TestScheduler` to the `Interval` method to use instead of the default scheduler.
+现在我们已经了解了一些关于 `TestScheduler` 的知识，让我们看看我们如何可以使用它来测试我们最初的两个使用 `Interval` 和 `Timeout` 的代码片段。我们希望尽可能快地执行测试，但仍然保持时间的语义。在这个例子中，我们生成我们的五个值，每个值间隔一秒，但传入我们的 `TestScheduler` 到 `Interval` 方法中使用而不是默认的调度器。
 
 ```csharp
 [TestMethod]
@@ -279,11 +279,11 @@ public void Testing_with_test_scheduler()
 
     scheduler.Start();
     CollectionAssert.AreEqual(expectedValues, actualValues);
-    // Executes in less than 0.01s "on my machine"
+    // 在我的机器上执行时间少于 0.01 秒
 }
 ```
 
-While this is mildly interesting, what I think is more important is how we would test a real piece of code. Imagine, if you will, a ViewModel that subscribes to a stream of prices. As prices are published, it adds them to a collection. Assuming this is a WPF implementation, we take the liberty of enforcing that the subscription be done on the `ThreadPool` and the observing is executed on the `Dispatcher`.
+虽然这个例子有点有趣，但我认为更重要的是我们将如何测试一个真实的代码片段。想象一下，一个 ViewModel 订阅了一个价格流。价格发布时，它会将它们添加到一个集合中。假设这是一个 WPF 实现，我们有权强制订阅在 `ThreadPool` 上完成，并且观察是在 `Dispatcher` 上执行的。
 
 ```csharp
 public class MyViewModel : IMyViewModel
@@ -306,7 +306,7 @@ public class MyViewModel : IMyViewModel
                 .Timeout(TimeSpan.FromSeconds(10), Scheduler.ThreadPool)
                 .Subscribe(
                     Prices.Add,
-                    ex=>
+                    ex =>
                         {
                             if(ex is TimeoutException)
                                 IsConnected = false;
@@ -323,9 +323,9 @@ public class MyViewModel : IMyViewModel
 }
 ```
 
-### Injecting scheduler dependencies
+### 注入调度器依赖
 
-While the snippet of code above may do what we want it to, it will be hard to test as it is accessing the schedulers via static properties. You will need some way of enabling tests to supply different schedulers during testing. In this example, we're going to define an interface for this purpose:
+虽然上面的代码片段可能完成了我们想要的功能，但它很难测试，因为它是通过静态属性访问调度器的。您将需要一些方法在测试期间提供不同的调度器。在这个例子中，我们将为此目的定义一个接口：
 
 ```csharp
 public interface ISchedulerProvider
@@ -339,7 +339,7 @@ public interface ISchedulerProvider
 }
 ```
 
-The default implementation that we would run in production is implemented as follows:
+我们在生产中运行的默认实现如下所示：
 
 ```csharp
 public sealed class SchedulerProvider : ISchedulerProvider
@@ -353,21 +353,21 @@ public sealed class SchedulerProvider : ISchedulerProvider
 }
 ```
 
-We can substitute implementations of `ISchedulerProvider` to help with testing. For example:
+我们可以在测试中替换 `ISchedulerProvider` 的实现。例如：
 
 ```csharp
 public sealed class TestSchedulers : ISchedulerProvider
 {
-    // Schedulers available as TestScheduler type
+    // 以 TestScheduler 类型提供调度器
     public TestScheduler CurrentThread { get; }  = new TestScheduler();
     public TestScheduler Dispatcher { get; }  = new TestScheduler();
     public TestScheduler Immediate { get; }  = new TestScheduler();
     public TestScheduler NewThread { get; }  = new TestScheduler();
     public TestScheduler ThreadPool { get; }  = new TestScheduler();
     
-    // ISchedulerService needs us to return IScheduler, but we want the properties
-    // to return TestScheduler for the convenience of test code, so we provide
-    // explicit implementations of all the properties to match ISchedulerService.
+    // ISchedulerService 需要我们返回 IScheduler，但我们希望属性
+    // 返回 TestScheduler 以方便测试代码的使用，所以我们提供
+    // 所有属性的显式实现以匹配 ISchedulerService。
     IScheduler ISchedulerProvider.CurrentThread => CurrentThread;
     IScheduler ISchedulerProvider.Dispatcher => Dispatcher;
     IScheduler ISchedulerProvider.Immediate => Immediate;
@@ -376,7 +376,7 @@ public sealed class TestSchedulers : ISchedulerProvider
 }
 ```
 
-Note that `ISchedulerProvider` is implemented explicitly because that interface requires each property to return an `IScheduler`, but our tests will need to access the `TestScheduler` instances directly. I can now write some tests for my ViewModel. Below, we test a modified version of the `MyViewModel` class that takes an `ISchedulerProvider` and uses that instead of the static schedulers from the `Scheduler` class. We also use the popular [Moq](https://github.com/Moq) framework to provide a suitable fake implementation of our model.
+注意 `ISchedulerProvider` 是显式实现的，因为该接口要求每个属性返回一个 `IScheduler`，但我们的测试将需要直接访问 `TestScheduler` 实例。我现在可以为我的 ViewModel 编写一些测试了。下面，我们测试了一个修改过的 `MyViewModel` 类，它接受一个 `ISchedulerProvider` 并使用它而不是 `Scheduler` 类的静态调度器。我们还使用流行的 [Moq](https://github.com/Moq) 框架提供适当的假实现模型。
 
 ```csharp
 [TestInitialize]
@@ -396,16 +396,16 @@ public void Should_add_to_Prices_when_Model_publishes_price()
 
     _viewModel.Show("SomeSymbol");
     
-    // Schedule the OnNext
+    // 安排 OnNext
     _schedulerProvider.ThreadPool.Schedule(() => priceStream.OnNext(expected));  
 
     Assert.AreEqual(0, _viewModel.Prices.Count);
 
-    // Execute the OnNext action
+    // 执行 OnNext 动作
     _schedulerProvider.ThreadPool.AdvanceBy(1);  
     Assert.AreEqual(0, _viewModel.Prices.Count);
     
-    // Execute the OnNext handler
+    // 执行 OnNext 处理程序
     _schedulerProvider.Dispatcher.AdvanceBy(1);  
     Assert.AreEqual(1, _viewModel.Prices.Count);
     Assert.AreEqual(expected, _viewModel.Prices.First());
@@ -427,25 +427,25 @@ public void Should_disconnect_if_no_prices_for_10_seconds()
 }
 ```
 
-Output:
+输出：
 
 ```
 2 passed, 0 failed, 0 skipped, took 0.41 seconds (MSTest 10.0).
 ```
 
-These two tests ensure five things:
+这两个测试确保了五件事：
 
-* That the `Price` property has prices added to it as the model produces them
-* That the sequence is subscribed to on the ThreadPool
-* That the `Price` property is updated on the Dispatcher i.e. the sequence is observed on the Dispatcher
-* That a timeout of 10 seconds between prices will set the ViewModel to disconnected
-* The tests run fast.
-  
-While the time to run the tests is not that impressive, most of that time seems to be spent warming up my test harness. Moreover, increasing the test count to 10 only adds 0.03seconds. In general, a modern CPU should be able to execute thousands of unit tests per second.
+* `Price` 属性随着模型产生的价格而增加
+* 该序列在 ThreadPool 上被订阅
+* `Price` 属性在 Dispatcher 上更新，即序列在 Dispatcher 上被观察
+* 价格之间的 10 秒超时会将 ViewModel 设置为断开连接
+* 测试运行速度快。
 
-In the first test, we can see that only once both the `ThreadPool` and the `Dispatcher` schedulers have been run will we get a result. In the second test, it helps to verify that the timeout is not less than 10 seconds.
+尽管运行测试的时间并不那么让人印象深刻，但大部分时间似乎都花在了热身测试工具上。而且，将测试数量增加到 10 只增加了 0.03 秒。一般来说，现代 CPU 应该能够每秒执行上千个单元测试。
 
-In some scenarios, you are not interested in the scheduler and you want to be focusing your tests on other functionality. If this is the case, then you may want to create another test implementation of the `ISchedulerProvider` that returns the `ImmediateScheduler` for all of its members. That can help reduce the noise in your tests.
+在第一个测试中，我们可以看到只有在 `ThreadPool` 和 `Dispatcher` 调度器都运行后，我们才会得到结果。在第二个测试中，它有助于验证超时不少于 10 秒。
+
+在某些情况下，您可能不感兴趣的是调度器而您希望专注于测试其他功能。如果是这种情况，那么您可能希望创建另一个 `ISchedulerProvider` 的测试实现，该实现为其成员返回 `ImmediateScheduler`。这可以帮助减少您测试中的干扰。
 
 ```csharp
 public sealed class ImmediateSchedulers : ISchedulerService
@@ -458,30 +458,30 @@ public sealed class ImmediateSchedulers : ISchedulerService
 }
 ```
 
-## Advanced features - ITestableObserver
+## 高级功能 - ITestableObserver
 
-The `TestScheduler` provides further advanced features. These can be useful when parts of your test setup need to run at particular virtual times.
+`TestScheduler` 提供了更多高级功能。当测试设置的某些部分需要在特定的虚拟时间运行时，这些功能可能会有用。
 
-### `Start(Func<IObservable<T>>)`
+### `Start(Func<IObservable<T>>)` 方法
 
-There are three overloads to `Start`, which are used to start an observable sequence at a given time, record the notifications it makes and dispose of the subscription at a given time. This can be confusing at first, as the parameterless overload of `Start` is quite unrelated. These three overloads return an `ITestableObserver<T>` which allows you to record the notifications from an observable sequence, much like the `Materialize` method we saw in the [Transformation chapter](06_Transformation.md#materialize-and-dematerialize).
+`Start` 有三种重载，用于在给定时间开始观察一个可观察序列，记录它发出的通知，并在给定时间处置订阅。起初可能会让人困惑，因为无参数重载的 `Start` 与此完全无关。这三种重载返回一个 `ITestableObserver<T>`，它允许你记录可观察序列的通知，很像我们在 [Transformation chapter](06_Transformation.md#materialize-and-dematerialize) 中看到的 `Materialize` 方法。
 
 ```csharp
 public interface ITestableObserver<T> : IObserver<T>
 {
-    // Gets recorded notifications received by the observer.
+    // 获取观察者接收到的记录通知。
     IList<Recorded<Notification<T>>> Messages { get; }
 }
 ```
 
-While there are three overloads, we will look at the most specific one first. This overload takes four parameters:
+虽然有三个重载，但我们首先看最具体的一个。这个重载接受四个参数：
 
-* an observable sequence factory delegate
-* the point in time to invoke the factory
-* the point in time to subscribe to the observable sequence returned from the factory
-* the point in time to dispose of the subscription
+* 一个可观察序列工厂委托
+* 调用工厂的时间点
+* 订阅从工厂返回的可观察序列的时间点
+* 处置订阅的时间点
 
-The _time_ for the last three parameters is measured in ticks, as per the rest of the `TestScheduler` members.
+最后三个参数的 _时间_ 都以刻为单位，与 `TestScheduler` 的其余成员一致。
 
 ```csharp
 public ITestableObserver<T> Start<T>(
@@ -492,7 +492,7 @@ public ITestableObserver<T> Start<T>(
 {...}
 ```
 
-We could use this method to test the `Observable.Interval` factory method. Here, we create an observable sequence that spawns a value every second for 4 seconds. We use the `TestScheduler.Start` method to create and subscribe to it immediately (by passing 0 for the second and third parameters). We dispose of our subscription after 5 seconds. Once the `Start` method has run, we output what we have recorded.
+我们可以使用这个方法来测试 `Observable.Interval` 工厂方法。这里，我们创建一个每秒产生一个值持续 4 秒的可观察序列。我们使用 `TestScheduler.Start` 方法立即创建并订阅它（通过为第二和第三个参数传递 0）。我们在 5 秒后取消我们的订阅。一旦 `Start` 方法运行完毕，我们输出我们记录的内容。
 
 ```csharp
 var scheduler = new TestScheduler();
@@ -514,7 +514,7 @@ foreach (Recorded<Notification<long>> message in testObserver.Messages)
 }
 ```
 
-Output:
+输出：
 
 ```
 Time is 50000000 ticks
@@ -526,9 +526,9 @@ OnNext(3) @ 40000001
 OnCompleted() @ 40000001
 ```
 
-Note that the `ITestObserver<T>` records `OnNext` and `OnCompleted` notifications. If the sequence was to terminate in error, the `ITestObserver<T>` would record the `OnError` notification instead.
+请注意，`ITestObserver<T>` 记录 `OnNext` 和 `OnCompleted` 通知。如果序列以错误终止，`ITestObserver<T>` 会记录 `OnError` 通知。
 
-We can play with the input variables to see the impact it makes. We know that the `Observable.Interval` method is a Cold Observable, so the virtual time of the creation is not relevant. Changing the virtual time of the subscription can change our results. If we change it to 2 seconds, we will notice that if we leave the disposal time at 5 seconds, we will miss some messages.
+我们可以改变输入变量以查看它产生的影响。我们知道 `Observable.Interval` 方法是一个冷可观察对象，因此创建的虚拟时间并不重要。改变虚拟订阅时间可以改变我们的结果。如果我们将其改为 2 秒，我们会注意到，如果我们让处置时间维持在 5 秒，我们会错过一些消息。
 
 ```csharp
 var testObserver = scheduler.Start(
@@ -538,7 +538,7 @@ var testObserver = scheduler.Start(
     TimeSpan.FromSeconds(5).Ticks);
 ```
 
-Output:
+输出：
 
 ```
 Time is 50000000 ticks
@@ -547,9 +547,9 @@ OnNext(0) @ 30000000
 OnNext(1) @ 40000000
 ```
 
-We start the subscription at 2 seconds; the `Interval` produces values after each second (i.e. second 3 and 4), and we dispose on second 5. So we miss the other two `OnNext` messages as well as the `OnCompleted` message.
+我们在第 2 秒开始订阅；`Interval` 在每秒后产生值（即第 3 秒和第 4 秒），在第 5 秒我们取消了订阅。所以我们错过了另外两个 `OnNext` 消息以及 `OnCompleted` 消息。
 
-There are two other overloads to this `TestScheduler.Start` method.
+此 `TestScheduler.Start` 方法的其他两种重载如下所示。
 
 ```csharp
 public ITestableObserver<T> Start<T>(Func<IObservable<T>> create, long disposed)
@@ -577,34 +577,34 @@ public ITestableObserver<T> Start<T>(Func<IObservable<T>> create)
 }
 ```
 
-As you can see, these overloads just call through to the variant we have been looking at, but passing some default values. These default values provide short gaps before creation and between creation and subscription, giving enough space to configure other things to happen between them. And then the disposal happens a bit later, allowing a little longer for the thing to run. There's nothing particularly magical about these default values, but if you value a lack of clutter over it being completely obvious what happens when, and are happy to rely on the invisible effects of convention, then you might prefer this. The Rx source code itself contains thousands of tests, and a very large number of them use the simplest `Start` overload, and developers working in the code base day in, day out soon get used to the idea that creation occurs at time 100, and subscription at time 200, and that you test everything you need to before 1000.
+正如您所见，这些重载只是调用我们一直在看的变体，但传递了一些默认值。这些默认值在创建和订阅之间以及实际工作运行之前提供了足够的间隙。这些默认值没有什么特别神奇的，但如果你重视简洁性超过完全明显的事实，并且愿意依赖于约定的无形效果，那么你可能更喜欢这种方式。Rx 源代码本身包含数千个测试，其中大量使用最简单的 `Start` 重载，日复一日在代码库中工作的开发人员很快就习惯了在时间 100 创建，在时间 200 订阅，以及在时间 1000 之前测试你需要测试的所有东西的想法。
 
 ### CreateColdObservable
 
-Just as we can record an observable sequence, we can also use `CreateColdObservable` to play back a set of `Recorded<Notification<int>>`. The signature for `CreateColdObservable` simply takes a `params` array of recorded notifications.
+就像我们可以记录一个可观察序列一样，我们也可以使用 `CreateColdObservable` 来回放一组 `Recorded<Notification<int>>`。`CreateColdObservable` 的签名只需接受一个 `params` 数组的记录通知。
 
 ```csharp
-// Creates a cold observable from an array of notifications.
-// Returns a cold observable exhibiting the specified message behavior.
+// 从一系列通知中创建一个冷可观察对象。
+// 返回显示指定消息行为的冷可观察对象。
 public ITestableObservable<T> CreateColdObservable<T>(
     params Recorded<Notification<T>>[] messages)
 {...}
 ```
 
-The `CreateColdObservable` returns an `ITestableObservable<T>`. This interface extends `IObservable<T>` by exposing the list of "subscriptions" and the list of messages it will produce.
+`CreateColdObservable` 返回一个 `ITestableObservable<T>`。这个接口通过暴露 "订阅" 列表和它将产生的消息列表，扩展了 `IObservable<T>`。
 
 ```csharp
 public interface ITestableObservable<T> : IObservable<T>
 {
-    // Gets the subscriptions to the observable.
+    // 获取对可观察对象的订阅。
     IList<Subscription> Subscriptions { get; }
 
-    // Gets the recorded notifications sent by the observable.
+    // 获取可观察对象发送的记录通知。
     IList<Recorded<Notification<T>>> Messages { get; }
 }
 ```
 
-Using `CreateColdObservable`, we can emulate the `Observable.Interval` test we had earlier.
+使用 `CreateColdObservable`，我们可以模拟我们之前使用 `Observable.Interval` 的测试。
 
 ```csharp
 var scheduler = new TestScheduler();
@@ -631,7 +631,7 @@ foreach (Recorded<Notification<long>> message in testObserver.Messages)
 }
 ```
 
-Output:
+输出：
 
 ```
 Time is 50000000 ticks
@@ -643,13 +643,13 @@ OnNext(3) @ 40000001
 OnCompleted() @ 40000001
 ```
 
-Note that our output is exactly the same as the previous example with `Observable.Interval`.
+请注意，我们的输出与 `Observable.Interval` 的前一个示例完全相同。
 
 ### CreateHotObservable
 
-We can also create hot test observable sequences using the `CreateHotObservable` method. It has the same parameters and return value as `CreateColdObservable`; the difference is that the virtual time specified for each message is now relative to when the observable was created, not when it is subscribed to as per the `CreateColdObservable` method.
+我们也可以使用 `CreateHotObservable` 方法创建热测试可观察序列。它具有与 `CreateColdObservable` 相同的参数和返回值；区别在于，每条消息的虚拟时间现在是相对于可观察对象创建时的时间，而不是与 `CreateColdObservable` 方法一样的订阅时间。
 
-This example is just that last "cold" sample, but creating a Hot observable instead.
+这个例子正是最后那个“冷”样本，但创建了一个热可观察序列。
 
 ```csharp
 var scheduler = new TestScheduler();
@@ -658,7 +658,7 @@ var source = scheduler.CreateHotObservable(
 // ...    
 ```
 
-Output:
+输出：
 
 ```
 Time is 50000000 ticks
@@ -670,9 +670,9 @@ OnNext(3) @ 40000000
 OnCompleted() @ 40000000
 ```
 
-Note that the output is almost the same. Scheduling of the creation and subscription do not affect the Hot Observable, therefore the notifications happen 1 tick earlier than their Cold counterparts.
+注意，输出几乎与冷相似。安排创建和订阅不会影响热可观察对象，因此通知比冷同位数提前 1 刻发生。
 
-We can see the major difference a Hot Observable bears by changing the virtual create time and virtual subscribe time to be different values. With a Cold Observable, the virtual create time has no real impact, as subscription is what initiates any action. This means we cannot miss any early message on a Cold Observable. For Hot Observables, we can miss messages if we subscribe too late. Here, we create the Hot Observable immediately, but only subscribe to it after 1 second (thus missing the first message).
+通过修改虚拟创建时间和虚拟订阅时间为不同值，我们可以看到热可观察对象的主要不同之处。对于冷可观察对象来说，虚拟创建时间并没有真正的影响，因为订阅是启动任何动作的。这意味着我们不能错过冷可观察对象的任何早期消息。对于热可观察对象，如果我们订阅太晚，我们可能会错过消息。在这里，我们立即创建了热可观察对象，但只在 1 秒后订阅它（因此错过了第一个消息）。
 
 ```csharp
 var scheduler = new TestScheduler();
@@ -699,7 +699,7 @@ foreach (Recorded<Notification<long>> message in testObserver.Messages)
 }
 ```
 
-Output:
+输出：
 
 ```
 Time is 50000000 ticks
@@ -712,6 +712,6 @@ OnCompleted() @ 40000000
 
 ### CreateObserver 
 
-Finally, if you do not want to use the `TestScheduler.Start` methods, and you need more fine-grained control over your observer, you can use `TestScheduler.CreateObserver()`. This will return an `ITestObserver` that you can use to manage the subscriptions to your observable sequences with. Furthermore, you will still be exposed to the recorded messages and any subscribers.
+最后，如果您不想使用 `TestScheduler.Start` 方法，而需要对您的观察者进行更细粒度的控制，您可以使用 `TestScheduler.CreateObserver()`。这将返回一个 `ITestObserver`，您可以使用它来管理对您的可观察序列的订阅。此外，您仍然可以看到记录的消息和任何订阅者。
 
-Current industry standards demand broad coverage of automated unit tests to meet quality assurance standards. Concurrent programming, however, is often a difficult area to test well. Rx delivers a well-designed implementation of testing features, allowing deterministic and high-throughput testing. The `TestScheduler` provides methods to control virtual time and produce observable sequences for testing. This ability to easily and reliably test concurrent systems sets Rx apart from many other libraries.
+现代行业标准要求广泛覆盖自动化单元测试以满足质量保证标准。然而，并发编程通常是一个测试良好的难题领域。Rx 提供了一个设计良好的测试功能实现，允许确定性和高吞吐量的测试。`TestScheduler` 提供了控制虚拟时间和生成用于测试的可观察序列的方法。这种轻松可靠地测试并发系统的能力使 Rx 与许多其他库区别开来。
