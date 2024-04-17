@@ -1,50 +1,50 @@
-# Appendix B: Disposables
-    
-Rx represents subscriptions using the existing `IDisposable` interface. This design choice means we can use existing language features that know how to work with this interface. Rx also provides several public implementations of `IDisposable`. These can be found in the `System.Reactive.Disposables` namespace. This appendix briefly describes each of them.
+# 附录 B: 可释放对象
 
-With the exception of [`ScheduledDisposable`](#scheduleddisposable), these have no particular connection to Rx, and can be useful in any code that needs to work with `IDisposable`. (This code all lives in `System.Reactive` though, so although you could uses these features entirely outside of Rx-based code, you will still be taking a dependency on Rx.NET if you do so.)
+Rx使用现有的`IDisposable`接口来表示订阅关系。这种设计选择意味着我们可以使用已知如何与此接口协作的现有语言特性。Rx还提供了`IDisposable`的几种公开实现。这些可以在`System.Reactive.Disposables`命名空间中找到。此附录简要描述了它们中的每一个。
+
+除了[`ScheduledDisposable`](#scheduleddisposable)外，这些与Rx没有特别的联系，可在任何需要使用`IDisposable`的代码中使用。（这些代码都位于`System.Reactive`中，因此，即使您完全在非Rx的代码中使用这些功能，您仍将依赖于Rx.NET。）
 
 ## `Disposable.Empty`
-This static property exposes an implementation of `IDisposable` that performs no action when the `Dispose` method is invoked. This can be useful when you are obliged to supply an `IDisposable` (which can happen if you use `Observable.Create`) but don't need to do anything upon disposal.
+这个静态属性暴露了一个实现了`IDisposable`的实例，当调用`Dispose`方法时不执行任何操作。当您需要提供一个`IDisposable`（使用`Observable.Create`时可能需要）但在释放时不需要做任何事情时，这会很有用。
 
 ## `Disposable.Create(Action)`
 
-This static method exposes an implementation of `IDisposable` that invokes the method supplied when the `Dispose` method is invoked. As the implementation follows the guidance to be idempotent, the action will only be called on the first time the `Dispose` method is invoked.
+该静态方法提供了一个实现了`IDisposable`的实例，它在调用`Dispose`方法时会调用提供的方法。按照指南，实现应该是幂等的，动作只会在第一次调用`Dispose`方法时被调用。
 
 ## `BooleanDisposable`
 
-This class implements `IDisposable.Dispose` method and also defines a read-only property `IsDisposed`. `IsDisposed` is <code>false</code> when the class is constructed, and is set to <code>true</code> when the `Dispose` method is invoked.
+这个类实现了`IDisposable.Dispose`方法，并定义了一个只读属性`IsDisposed`。`IsDisposed`在类构造时为<code>false</code>，在调用`Dispose`方法时设为<code>true</code>。
 
 ## `CancellationDisposable`
 
-The `CancellationDisposable` class offers an integration point between the .NET [cancellation paradigm](https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/task-cancellation) (`CancellationTokenSource`) and the resource management paradigm (`IDisposable`). You can create an instance of the `CancellationDisposable` class by providing a `CancellationTokenSource` to the constructor, or by having the parameterless constructor create one for you. Calling `Dispose` will invoke the `Cancel` method on the `CancellationTokenSource`. There are two properties (`Token` and `IsDisposed`) that `CancellationDisposable` exposes; they are wrappers for the `CancellationTokenSource` properties, respectively `Token` and `IsCancellationRequested`.
+`CancellationDisposable`类提供了.NET[取消范式](https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/task-cancellation)（`CancellationTokenSource`）与资源管理范式（`IDisposable`）之间的整合点。您可以通过提供一个`CancellationTokenSource`给构造函数创建一个`CancellationDisposable`实例，或者通过无参数构造函数为您创建一个。调用`Dispose`将会调用`CancellationTokenSource`上的`Cancel`方法。`CancellationDisposable`暴露出两个属性（`Token`和`IsDisposed`），它们分别是`CancellationTokenSource`属性的包装器，分别是`Token`和`IsCancellationRequested`。
 
 ## `CompositeDisposable`
 
-The `CompositeDisposable` type allows you to treat many disposable resources as one. You can create an instance of `CompositeDisposable` by passing in a <code>params</code> array of disposable resources. Calling `Dispose` on the `CompositeDisposable` will call dispose on each of these resources in the order they were provided. Additionally, the `CompositeDisposable` class implements `ICollection<IDisposable>`; this allows you to add and remove resources from the collection. After the `CompositeDisposable` has been disposed of, any further resources that are added to this collection will be disposed of instantly. Any item that is removed from the collection is also disposed of, regardless of whether the collection itself has been disposed of. This includes usage of both the `Remove` and `Clear` methods.
+`CompositeDisposable`类型允许您将多个可释放资源视为一个整体。您可以通过传入一个<code>params</code>可释放资源数组来创建`CompositeDisposable`的实例。对`CompositeDisposable`调用`Dispose`会按提供的顺序释放这些资源。此外，`CompositeDisposable`类实现了`ICollection<IDisposable>`；这允许您向集合添加和移除资源。在`CompositeDisposable`被释放后，添加到此集合中的任何后续资源都将被立即释放。从集合中移除的任何项目也将被释放，无论集合本身是否已被释放。这包括使用`Remove`和`Clear`方法。
 
 ## `ContextDisposable`
-`ContextDisposable` allows you to enforce that disposal of a resource is performed on a given `SynchronizationContext`. The constructor requires both a `SynchronizationContext` and an `IDisposable` resource. When the `Dispose` method is invoked on the `ContextDisposable`, the provided resource will be disposed of on the specified context.
+`ContextDisposable`允许您强制在给定的`SynchronizationContext`上执行资源的释放。构造函数需要一个`SynchronizationContext`和一个`IDisposable`资源。当对`ContextDisposable`调用`Dispose`方法时，将在指定的上下文中释放提供的资源。
 
 ## `MultipleAssignmentDisposable`
 
-The `MultipleAssignmentDisposable` exposes a read-only `IsDisposed` property and a read/write property `Disposable`. Invoking the `Dispose` method on the `MultipleAssignmentDisposable` will dispose of the current value held by the `Disposable` property. It will then set that value to null. As long as the `MultipleAssignmentDisposable` has not been disposed of, you are able to set the `Disposable` property to `IDisposable` values as you would expect. Once the `MultipleAssignmentDisposable` has been disposed, attempting to set the `Disposable` property will cause the value to be instantly disposed of; meanwhile, `Disposable` will remain null.
+`MultipleAssignmentDisposable`暴露了一个只读的`IsDisposed`属性和一个读/写的`Disposable`属性。在`MultipleAssignmentDisposable`上调用`Dispose`方法将会释放由`Disposable`属性持有的当前值。然后将该值设置为null。只要`MultipleAssignmentDisposable`尚未被释放，您就可以按预期设置`Disposable`属性的`IDisposable`值。一旦`MultipleAssignmentDisposable`被释放，试图设置`Disposable`属性将使该值立即被释放；同时，`Disposable`将保持为null。
 
 ## `RefCountDisposable`
 
-The `RefCountDisposable` offers the ability to prevent the disposal of an underlying resource until all dependent resources have been disposed. You need an underlying `IDisposable` value to construct a `RefCountDisposable`. You can then call the `GetDisposable` method on the `RefCountDisposable` instance to retrieve a dependent resource. Each time a call to `GetDisposable` is made, an internal counter is incremented. Each time one of the dependent disposables from `GetDisposable` is disposed, the counter is decremented. Only if the counter reaches zero will the underlying be disposed of. This allows you to call `Dispose` on the `RefCountDisposable` itself before or after the count is zero.
+`RefCountDisposable`提供了一种功能，防止底层资源被释放，直到所有依赖资源都被释放。您需要一个基础的`IDisposable`值来构造一个`RefCountDisposable`。然后您可以调用`RefCountDisposable`实例的`GetDisposable`方法来检索一个依赖资源。每次调用`GetDisposable`时，一个内部计数器都会增加。每次从`GetDisposable`获取的依赖性可处置资源被释放时，计数器就会递减。只有当计数器达到零时，才会释放底层资源。这允许您在计数为零前后调用`RefCountDisposable`本身的`Dispose`方法。
 
 ## `ScheduledDisposable`
 
-In a similar fashion to `ContextDisposable`, the `ScheduledDisposable` type allows you to specify a scheduler, onto which the underlying resource will be disposed. You need to pass both the instance of `IScheduler` and instance of `IDisposable` to the constructor. When the `ScheduledDisposable` instance is disposed of, the disposal of the underlying resource will be executed through the provided scheduler.
+与`ContextDisposable`类似，`ScheduledDisposable`类型允许您指定一个调度器，底层资源将在该调度器上被释放。您需要传递`IScheduler`实例和`IDisposable`实例给构造函数。当`ScheduledDisposable`实例被释放时，将通过提供的调度器执行底层资源的释放。
 
 ## `SerialDisposable`
 
-`SerialDisposable` is very similar to `MultipleAssignmentDisposable`, as they both expose a read/write `Disposable` property. The contrast between them is that whenever the `Disposable` property is set on a `SerialDisposable`, the previous value is disposed of. Like the `MultipleAssignmentDisposable`, once the `SerialDisposable` has been disposed of, the `Disposable` property will be set to null and any further attempts to set it will have the value disposed of. The value will remain as null.
+`SerialDisposable`与`MultipleAssignmentDisposable`非常相似，因为它们都暴露了一个读/写的`Disposable`属性。它们之间的区别在于，每当在`SerialDisposable`上设置`Disposable`属性时，先前的值会被释放。与`MultipleAssignmentDisposable`一样，一旦`SerialDisposable`被释放，`Disposable`属性将被设置为null，任何进一步尝试设置它的操作都将使该值被释放。该值将保持为null。
 
 ## `SingleAssignmentDisposable`
 
-The `SingleAssignmentDisposable` class also exposes `IsDisposed` and `Disposable` properties. Like `MultipleAssignmentDisposable` and `SerialDisposable`, the `Disposable` value will be set to null when the `SingleAssignmentDisposable` is disposed of. The difference in implementation here is that the `SingleAssignmentDisposable` will throw an `InvalidOperationException` if there is an attempt to set the `Disposable` property while the value is not null and the `SingleAssignmentDisposable` has not been disposed of.
+`SingleAssignmentDisposable`类也暴露了`IsDisposed`和`Disposable`属性。像`MultipleAssignmentDisposable`和`SerialDisposable`一样，当`SingleAssignmentDisposable`被释放时，`Disposable`值会被设置为null。这里实现的不同之处在于，如果在值不为null且`SingleAssignmentDisposable`未被释放时试图设置`Disposable`属性，`SingleAssignmentDisposable`将抛出一个`InvalidOperationException`异常。
 
 <!-- 
 TODO: we recently made SingleAssignmentDisposableValue public after a request to do so. This also doesn't mention MultipleAssignmentDisposableValue, which has been around for a while.

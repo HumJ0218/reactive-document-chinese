@@ -1,10 +1,10 @@
-# Appendix D: Rx's Algebraic Underpinnings
+# 附录D：Rx的代数基础
 
-Rx operators can be combined together in more or less any way you can imagine, and they generally combine without any problems. The fact that this works is not merely a happy accident. In general, integration between software components is often one of the largest sources of pain in software development, so the fact that it works so well is remarkable. This is in large part thanks to the fact that Rx relies on some underlying theory. Rx has been designed so that you don't need to know these details to use it, but curious developers typically want to know these things.
+Rx操作符可以以您能想象的几乎任何方式组合在一起，它们通常能够无问题地组合。这一点的实现不仅仅是一个幸运的偶然。一般来说，软件组件之间的集成往往是软件开发中最大的痛点之一，所以这种良好的集成是非常显著的。这在很大程度上归功于Rx依赖于一些底层理论。Rx的设计使得您不需要了解这些细节就可以使用它，但好奇的开发者通常想要了解这些事情。
 
-The earlier sections of the book have already talked about one formal aspect of Rx: the contract between observable sources and their observables. There is a clearly defined grammar for what constitutes acceptable use of `IObserver<T>`. This goes beyond what the .NET type system is able to enforce, so we are reliant on code doing the right thing. However, the `System.Reactive` library does always adhere to this contract, and it also has some guard types in place that detect when application code has not quite played by the rules, and to prevent this from wreaking havoc.
+本书的前几章已经讨论了Rx的一个形式方面：可观察源与其观察者之间的契约。对于`IObserver<T>`的可接受使用有一个明确定义的语法。这超出了.NET类型系统能够强制执行的范围，所以我们依赖于代码做正确的事情。然而，`System.Reactive`库总是遵守这一契约，并且还有一些防护类型的措施，用来检测应用程序代码是否没有完全按规则行事，以防止这种情况引发灾难。
 
-The `IObserver<T>` grammar is important. Components rely on it to ensure correct operation. Consider the `Where` operator, for example. It provides its own `IObserver<T>` implementation with which it subscribes to the underlying source. This receives items from that source, and then decides which to forward to the observer that subscribed to the `IObservable<T>` presented by `Where`. You could imagine it looking something like this:
+`IObserver<T>`的语法非常重要。组件依赖它来确保正确操作。例如，考虑`Where`操作符。它提供了自己的`IObserver<T>`实现，通过它订阅底层源。这将从该源接收项目，然后决定将哪些项目转发给订阅`Where`所呈现的`IObservable<T>`的观察者。您可以将它想象成这样：
 
 ```csharp
 public class OverSimplifiedWhereObserver<T> : IObserver<T>
@@ -39,47 +39,47 @@ public class OverSimplifiedWhereObserver<T> : IObserver<T>
 }
 ```
 
-This does not take any explicit steps to follow the `IObserver<T>` grammar. It doesn't need to if the source to which it is subscribes also obeys those rules. Since this only ever calls its subscriber's `OnNext` in its own `OnNext`, and likewise for `OnCompleted` and `OnError`, then as long as the underlying source to which this operator is subscribed obeys the rules for how to call those three methods, this class will in turn also follow those rules automatically.
+这不需要采取任何明确的步骤来遵循`IObserver<T>`语法。如果它订阅的源也遵守这些规则，则它不需要这样做。由于这个类只在它自己的`OnNext`中调用它的订阅者的`OnNext`，`OnCompleted`和`OnError`也是如此，只要它所订阅的底层源遵守调用这三种方法的规则，这个类也会自动遵循这些规则。
 
-In fact, `System.Reactive` is not quite that trusting. It does have some code that detects certain violations of the grammar, but even these measures just ensure that the grammar is adhered to once execution enters Rx. There are some checks at the boundaries of the system, but Rx's innards rely heavily on the fact that upstream sources will abide by the rules.
+事实上，`System.Reactive`并不是那么信任。它确实有一些代码可以检测到某些语法违规情况，但即使这些措施仅仅确保一旦执行进入Rx，就会遵守语法。系统的边界有一些检查，但Rx的内部严重依赖于上游源将遵守规则。
 
-However, the grammar for `IObservable<T>` is not the only place where Rx relies on formalism to ensure correct operation. It also depends on a particular set of mathematical concepts:
+然而，`IObservable<T>`的语法并不是Rx依赖形式主义以确保正确操作的唯一地方。它还依赖于一组特定的数学概念：
 
-* Monads
-* Catamorphisms
-* Anamorphisms
+* 单子(Monads)
+* 合子(Catamorphisms)
+* 展子(Anamorphisms)
 
-Standard LINQ operators can be expressed purely in terms of these three ideas.
+标准LINQ操作符可以完全用这三个概念来表达。
 
-These concepts come from [category theory](https://en.wikipedia.org/wiki/Category_theory), a pretty abstract branch of mathematics concerned with mathematical structures. In the late 1980s, a few computer scientists were exploring this area of maths with a view to using them to model the behaviour of programs. [Eugenio Moggi](https://en.wikipedia.org/wiki/Eugenio_Moggi) (an Italian computer scientist who was, at the time, working at the University of Edinburgh) is generally credited for realising that monads in particular are well suited to describing computations, as his 1991 paper, [Notions of computations and monads](https://person.dibris.unige.it/moggi-eugenio/ftp/ic91.pdf) explains. These theoretical ideas and were incorporated into the Haskell programming language, primarily by Philip Wadler and Simon Peyton Jones, who published a proposal for [monadic handling of IO](https://www.microsoft.com/en-us/research/wp-content/uploads/1993/01/imperative.pdf) in 1992. By 1996, this had been fully incorporated into Haskell in its v1.3 release to enable programs' handling of input and output (e.g., handling user input, or writing data to files) to work in a way that was underpinned by strong mathematical foundations. This has widely been recognized as a significant improvement on Haskell's earlier attempts to model the messy realities of IO in a purely functional language.
+这些概念来自[范畴理论](https://en.wikipedia.org/wiki/Category_theory)，这是一个关于数学结构的非常抽象的数学分支。在1980年代末，一些计算机科学家正在探索这一数学领域，试图使用它们来模拟程序的行为。[Eugenio Moggi](https://en.wikipedia.org/wiki/Eugenio_Moggi)（当时在爱丁堡大学工作的意大利计算机科学家）通常被认为是意识到单子特别适合描述计算，正如他1991年的论文[Notions of computations and monads](https://person.dibris.unige.it/moggi-eugenio/ftp/ic91.pdf)所解释的那样。这些理论观点被纳入到Haskell编程语言中，主要通过Philip Wadler和Simon Peyton Jones的贡献，在1992年他们发布了关于[monadic handling of IO](https://www.microsoft.com/en-us/research/wp-content/uploads/1993/01/imperative.pdf)（IO的单态处理）的建议。到1996年，这已经完全被纳入Haskell v1.3版本，使得程序处理输入和输出（例如处理用户输入或向文件写入数据）的方式以强大的数学基础为支撑。这被广泛认为是比Haskell早期尝试以纯函数式语言建模IO的现实更好的改进。
 
-Why does any of this matter? These mathematical foundations are exactly why LINQ operators can be freely composed.
+这些数学基础是为何重要？这些数学基础正是LINQ操作符能够自由组合的原因。
 
-The mathematical discipline of category theory has developed a very deep understanding of various mathematical structures, and one of the most useful upshots for programmers is that it offers certain rules which, if followed, can ensure that software elements will behave well when combined together. This is, admittedly, a rather hand-wavey explanation. If you'd like a detailed explanation of exactly how category theory can be applied to programming, and why it is useful to do so, I can highly recommend [Bartosz Milewski's 'Category Theory for Programmers'](https://bartoszmilewski.com/2014/10/28/category-theory-for-programmers-the-preface/). The sheer volume of information available there should make it clear why I'm not about to attempt a full explanation in this appendix. Instead, my goal is just to outline the basic concepts, and explain how they correspond to features of Rx.
+范畴理论作为数学学科，对各种数学结构有了非常深入的理解，而对程序员最有用的是，它提供了一些规则，如果遵循这些规则，可以确保软件元素在组合在一起时的良好行为。这确实是一个相当含糊的解释。如果您想要详细了解如何将范畴理论应用于编程以及为什么这样做有用，我非常推荐[Bartosz Milewski的《程序员的范畴理论》](https://bartoszmilewski.com/2014/10/28/category-theory-for-programmers-the-preface/)。那里的信息量庞大，可以清楚地说明为什么我不打算在这个附录中尝试进行完整的解释。相反，我的目标只是概述基本概念，并解释它们如何与Rx的特性对应。
 
-## Monads
+## 单子
 
-Monads are the most important mathematical concept underpinning LINQ's (and therefore Rx's) design. It's not necessary to have the faintest idea of what a monad is to be able to use Rx. The most important fact is that their mathematical characteristics (and in particular, their support for composition) are what enable Rx operators to combine together freely. From a practical perspective, all that really matters is that it just works, but if you've read this far, that probably won't satisfy you.
+单子是支撑LINQ（因此也是Rx）设计的最重要的数学概念之一。实际上，不必了解单子是什么就可以使用Rx。最重要的事实是，它们的数学特性（特别是它们对组合的支持）使Rx操作符能够自由组合在一起。从实际角度来看，最重要的是它能够正常工作，但如果你读到这里，这可能还不能让你满意。
 
-It is often hard to describe precisely what mathematical objects really are, because they are inherently abstract. So before I get to the definition of a monad, it may be helpful to understand how LINQ uses this concept. LINQ treats a monad as a general purpose representation of a container of items. As developers, we know that there are many kinds of things that can contain items. There are arrays, and other collection types such as `IList<T>`. There are also databases, and although there are many ways in which a database table is quite different from an array, there are also some ways in which they are similar. The basic insight underpinning LINQ is that there is a mathematical abstraction that captures the essence of what containers have in common. If we determine that some .NET type represents a monad, then all of the work that mathematicians have done over the years to understand the characteristics and behaviours of monads will be applicable to that .NET type.
+描述精确的数学对象通常很难，因为它们本质上是抽象的。因此，在我解释单子的定义之前，了解LINQ如何使用这个概念可能会有所帮助。LINQ将单子视为一种通用的表示项的容器。作为开发者，我们知道有许多种类型的东西可以包含项。有数组，还有其他集合类型，如`IList<T>`。还有数据库，尽管数据库表与数组有很多不同之处，但在某些方面它们也是相似的。LINQ的基本见解是，存在一种数学抽象，可以捕捉容器共有的本质。如果我们确定某种.NET类型代表一个单子，那么多年来数学家们为了理解单子的特性和行为所做的所有工作都将适用于该.NET类型。
 
-For example, `IEnumerable<T>` is a monad, as is `IQueryable<T>`. And crucially for Rx, `IObservable<T>` is as well. LINQ's design relies on the properties of monads, so if you can determine that some .NET type is a monad, then it is a candidate for a LINQ implementation. (Conversely, if you try to create a LINQ provider for a type that is not a monad, you are likely to have problems.)
+例如，`IEnumerable<T>`是一个单子，`IQueryable<T>`也是。关键的是对于Rx，`IObservable<T>`也是。LINQ的设计依赖于单子的属性，所以如果您可以确定某种.NET类型是单子，那么它就是LINQ实现的候选对象。（反之，如果你尝试为一个不是单子的类型创建LINQ提供者，你可能会遇到问题。）
 
-So what are these characteristics that LINQ relies on? The first relates directly to containment: it must be possible to take some value and put it inside your monad. You'll notice that all the examples I've given so far are generic types, and that's no coincidence: monads are essentially type constructors, and the type argument indicates the kind of thing you want the monad to contain. So given some value of type `T`, it must be possible to wrap that in a monad for that type. Given an `int` we can get an `IEnumerable<int>`, and if we couldn't do that, `IEnumerable<T>` would not be monadic. The second characteristic is slightly harder to pin down without getting lost in high abstraction, but it essentially boils down to the idea that if we have functions that we can apply to individual contained items, and if those functions compose in useful ways, we can create new functions that operate not on individual values but on the containers, and crucially, those functions can also be composed in the same ways.
+那么，LINQ依赖的这些特性是什么呢？第一个直接关系到容纳：必须有可能取得某个值并将其放入你的单子中。您会注意到我到目前为止给出的所有例子都是泛型类型，这并非巧合：单子本质上是类型构造器，类型参数指示您希望单子包含的事物类型。所以给定某个类型`T`的值，必须有可能将它封装在该类型的单子中。给定一个`int`，我们可以得到一个`IEnumerable<int>`，如果做不到这一点，`IEnumerable<T>`就不是单子。第二个特性更难以界定，而不陷入高度抽象，但本质上归结为这样一个想法：如果我们有可以应用于单个包含项的函数，如果这些函数以有用的方式组合，我们可以创建新的函数来操作不是单个值而是容器，关键是，这些函数也可以以相同的方式组合。
 
-This enables us to work with entire containers as freely as we can work with individual values.
+这使我们能够像操作单个值一样自由地处理整个容器。
 
-### The monadic operations: return and bind
+### 单子的操作：return 和 bind
 
-We've just seen that monads aren't just a type. They need to supply certain operations. This first operation, the ability to wrap a value in the monad, is sometimes called _unit_ in mathematical texts, but in a computing context it is more often known as _return_. This is how [`Observable.Return`](03_CreatingObservableSequences.md#observablereturn) got its name.
+我们刚刚看到了，单子不仅仅是一个类型。它们需要提供某些操作。这第一个操作，将一个值包装在单子内，有时在数学文本中称为 _unit_，但在计算环境中更常称为 _return_。这就是[`Observable.Return`](03_CreatingObservableSequences.md#observablereturn) 如何得名的。
 
-There doesn't technically need to be an actual function. The monadic laws are satisfied as long as some mechanism is available to put a value into the monad. For example, unlike `Observable`, the `Enumerable` type does _not_ define a `Return` method, but it doesn't matter. You can just write `new[] { value }`, and that's enough.
+并不一定需要一个实际的函数。只要有某种机制可以将值放入单子，就满足了单子的规律。例如，不像`Observable`，`Enumerable`类型没有定义一个`Return`方法，但这并不重要。你可以简单写成`new[] { value }`，这就足够了。
 
-Monads are required to provide just one other operation. The mathematical literature calls it _bind_, some programming systems call it `flatMap`, and LINQ refers to it as `SelectMany`. This is the one that tends to cause the most head scratching, because although it has a clear formal definition, it's harder to say what it really does than with _return_. However, we're looking at monads through their ability to represent containers, and this offers a fairly straightforward way to understand bind/`SelectMany`: it lets us take a container where every item is a nested container (e.g., an array of arrays, or an `IEnumerable<IEnumerable<T>>`) and flatten it out. For example, a list of lists would become one list, containing every item from every list. As we'll soon see, this is not obviously related to the formal mathematical definition of bind, which is altogether more abstract, but it is compatible with it, which is all that's needed for us to enjoy the fruits of the mathematicians' labours.
+单子需要提供的另一个操作只有一个。数学文献称之为 _bind_，一些编程系统称其为`flatMap`，LINQ称之为`SelectMany`。这是一个最可能让人头疼的操作，因为尽管它有一个清晰的正式定义，比起_return_来说，很难说它究竟做了什么。然而，我们通过它们能够表示容器的能力来看待单子，这为我们提供了一种相当直接的方式来理解bind/`SelectMany`：它允许我们接受一个每个项都是嵌套容器的容器（例如，一个数组的数组，或一个`IEnumerable<IEnumerable<T>>`），并将其展平。例如，一个列表的列表将变为一个列表，包含每个列表中的每个项。我们很快会看到，这与bind的正式数学定义不明显相关，但它与之兼容，这是允许我们享用数学家劳动成果所需要的全部条件。
 
-Critically, to qualify as a monad, the two operations just described (return and bind) must conform to certain rules, or _laws_ as they are often described in the literature. There are three laws. All of them govern how the bind operation works, and two of these are concerned with how return and bind interact with one another. These laws are the foundation of the composability of operations based on monads. The laws are somewhat abstract, so it isn't exactly obvious _why_ they enable this, but they are non-negotiable. If your type and operations don't follow these laws, then you don't have a monad, so you can't rely on the characteristics monads guarantee.
+至关重要的是，作为单子，刚才描述的两个操作（return和bind）必须符合某些规则，或者经常在文献中描述的_laws（规律）_。这些法则有些抽象，因此不是很明显_为什么_它们能够实现这一点，但它们是不容置疑的。如果你的类型和操作不遵循这些法则，那么你就没有一个单子，因此你不能依靠单子所保证的特性。
 
-So what does bind actually look like? Here's how it looks for `IEnumerable<T>`:
+bind实际上是什么样的？下面是`IEnumerable<T>`的bind看起来是什么样的：
 
 ```csharp
 public static IEnumerable<TResult> SelectMany<TSource, TResult> (
@@ -87,78 +87,78 @@ public static IEnumerable<TResult> SelectMany<TSource, TResult> (
     Func<TSource,IEnumerable<TResult>> selector);
 ```
 
-So it is a function that takes two inputs. The first is an `IEnumerable<TSource>`. The second input is itself a function which, when supplied with a `TSource` produces an `IEnumerable<TResult>`. And when you invoke `SelectMany` (aka _bind_) with these two arguments, you get back an `IEnumerable<TResult>`. Although formal definition of bind requires it to have this shape, it doesn't dictate any particular behaviour—anything that conforms to the laws is acceptable. But in the context of LINQ, we do expect a specific behaviour: this will invoke the function (the second argument) once for every `TSource` in the source enumerable (the first argument), and then collect all of the `TResult` values produced by all of the `IEnumerable<TResult>` collections returned by all of the invocations of that function, wrapping them as a one big `IEnumerable<TResult>`. In this specific case of `IEnumerable<T>` we could describe `SelectMany` as getting one output collection for each input value, and then concatenating all of those output collections.
+所以它是一个函数，接受两个输入。第一个是`IEnumerable<TSource>`。第二个输入是一个函数，当提供一个`TSource`时产生一个`IEnumerable<TResult>`。当你用这两个参数调用`SelectMany`（也就是_bind_）时，你会得到一个`IEnumerable<TResult>`。虽然bind的正式定义需要它有这种形式，但它并没有规定任何特定的行为——任何符合法则的东西都是可以接受的。但在LINQ的上下文中，我们确实期望一个具体的行为：这将调用函数（第二个参数）一次，为源枚举（第一个参数）中的每个`TSource`，然后收集所有由函数返回的`IEnumerable<TResult>`集合中的所有`TResult`值，包装它们为一个大的`IEnumerable<TResult>`。在这个特定的`IEnumerable<T>`案例中，我们可以将`SelectMany`描述为为每个输入值获取一个输出集合，然后将所有这些输出集合连接在一起。
 
-But we've now got a little too specific. Even if we're looking specifically at LINQ's use of monads to represent generalised containers, `SelectMany` doesn't necessarily entail concatenation. It merely requires that the container returned by `SelectMany` contains all of the items produced by the function. Concatenation is one strategy, but Rx does something different. Since observables tend to produce values as and when they want to, the `IObservable<TResult>` returned by `Observable.SelectMany` just produces a value each time any of the individual per-`TSource` `IObservable<TResult>`s produced by the function produces a value. (It performs some synchronization to ensure that it follows Rx's rules for calls into `IObserver<T>`, so if one of these observables produces a value while a call to the subscriber's `OnNext` is in progress, it will wait for that to return before pushing the next value. But other than that, it just pushes all values straight through.) So the source values are essentially interleaved here, instead of being concatenated. But the broader principle—that the result is a container with every value produced by the callback for the individual inputs—applies.
+但我们现在已经变得有点太具体了。即使我们专门看LINQ如何使用单子来表示泛化的容器，`SelectMany`也并不一定需要连接。它只需要确保由`SelectMany`返回的容器包含由回调为个别输入所生成的每个值即可。连接是一种策略，但Rx做的是不同的事情。由于可观察对象倾向于根据它们的意愿产生值，由函数生成的个别`TSource`的`IObservable<TResult>`在该函数产生值时，由`Observable.SelectMany`返回的`IObservable<TResult>`就会产生一个值。（它执行了一些同步操作以确保它遵循Rx对`IObserver<T>`调用的规则，所以如果一个可观察对象在调用订阅者的`OnNext`时产生了一个值，它会等待它返回，然后再推送下一个值。但除此之外，它只是将所有值直接推送。）因此，源值在这里基本上是交错的，而不是连接的。但更广泛的原则——结果是一个容器，包含由回调为个别输入所产生的每个值——适用。
 
-The mathematical definition of a monadic bind has the same essential shape, it just doesn't dictate a particular behaviour. So any monad will have a bind operation that takes two inputs: an instance of the monadic type constructed for some input value type (`TSource`), and a function that takes a `TSource` as its input and produces an instance of the monadic type constructed for some output value type (`TResult`). When you invoke bind with these two inputs the result is an instance of the monadic type constructed for the output value type. We can't precisely represent this general idea in C#'s type system, but this sort of gives the broad flavour:
+数学定义的单子bind具有相同的基本形状，它只是没有规定特定的行为。所以任何单子都会有一个bind操作，它接受两个输入：一个为某个输入值类型(`TSource`)构造的单子类型的实例，以及一个函数，该函数以`TSource`作为输入并产生某个输出值类型(`TResult`)的单子类型的实例。当你用这两个输入调用bind时，结果是一个为输出值类型构造的单子类型的实例。我们不能在C#的类型系统中精确地表示这个一般性的想法，但这可以给出一个大致的感觉：
 
 ```csharp
-// An impressionistic sketch of the general form of a monadic bind
+// 对单子bind的总体形式的印象派素描
 public static M<TResult> SelectMany<TSource, TResult> (
     this M<TSource> source,
     Func<TSource, M<TResult>> selector);
 ```
 
-Substitute your chosen monadic type (`IObservable<T>`, `IEnumerable<T>`, `IQueryable<T>`, or whatever) for `M<T>`, and that tells you what bind should look like for that particular type.
+用你选择的单子类型（`IObservable<T>`、`IEnumerable<T>`、`IQueryable<T>`或其他）替换`M<T>`，这会告诉你bind对于特定类型应该是什么样的。
 
-But it's not enough to provide the two functions, return and bind. Not only must they have the correct shape, they must also abide by the laws.
+但提供这两个函数，return和bind，还不够。不仅它们必须具有正确的形状，它们还必须遵守法则。
 
-### The monadic laws
+### 单子法则
 
-So a monad consists of a type constructor (e.g., `IObservable<T>`) and two functions, `Return` and `SelectMany`. (From now on I'm just going to use these LINQy names.) But to qualify as a monad, these  features must abide by three "laws" (given in a very compact form here, which I'll explain in the following sections):
+因此，单子由类型构造器（例如`IObservable<T>`）和两个函数`Return`和`SelectMany`组成。（从现在开始我将只使用这些LINQ式的名字。）但要符合单子的标准，这些特征必须遵守三个“法则”（这里以非常简洁的形式给出，我将在以下部分解释）：
 
-1. `Return` is a 'left-identity' for `SelectMany`
-2. `Return` is a 'right-identity' for `SelectMany`
-3. `SelectMany` should be, in effect, associative
+1. `Return` 是 `SelectMany` 的“左恒等式”
+2. `Return` 是 `SelectMany` 的“右恒等式”
+3. `SelectMany` 实际上应该是关联的
 
-Let's look at each of these in a bit more detail
+让我们更详细地看看这些：
 
-#### Monadic law 1: `Return` is a 'left-identity' for `SelectMany`
+#### 单子法则1：`Return` 是 `SelectMany` 的“左恒等式”
 
-This law means that if you pass some value `x` into `Return` and then pass the result as one of the inputs to `SelectMany` where the other input is a function `SomeFunc`, then the result should be identical to just passing `x` directly into `SomeFunc`. For example:
+这个法则意味着，如果你把某个值`x`传递给`Return`，然后将结果作为一个输入传递给`SelectMany`，其中另一个输入是一个函数`SomeFunc`，那么结果应该与直接将`x`传递给`SomeFunc`相同。例如：
 
 ```csharp
-// Given a function like this:
+// 假设有这样一个函数：
 //  IObservable<bool> SomeFunc(int)
-// then these two should be identical.
+// 那么这两个应该是相同的。
 IObservable<bool> o1 = Observable.Return(42).SelectMany(SomeFunc);
 IObservable<bool> o2 = SomeFunc(42);
 ```
 
-Here's an informal way to understand this. `SelectMany` pushes every item in its input container through `SomeFunc`, and each such call produces a container of type `IObservable<bool>`, and it collects all these containers together into one big `IObservable<bool>` that contains items from all of the individual `IObservable<bool>` containers. But in this example, the input we provide to `SelectMany` contains just a single item, meaning that there's no collection work to be done. `SelectMany` is going to invoke our function just once with that one and only input, and that's going to produce just one output `IObservable<bool>`. `SelectMany` is obliged to return an `IObservable<bool>` that contains everything in the single `IObservable<bool>` it got from that single call to `SomeFunc`. There's no actual further processing for it to do in this case. Since there was only one call to `SomeFunc` it doesn't need to combine items from multiple containers in this case: that single output produced by the single call to `SomeFunc` contains everything that should be in the container that `SelectMany` is going to return. We can therefore just invoke `SomeFunc` directly with the single input item.
+这里一个非正式的理解方式：`SelectMany` 将输入容器中的每个项目通过`SomeFunc`推送，并且每个这样的调用都会产生一个类型为`IObservable<bool>`的容器，并且它收集所有这些容器到一个大的`IObservable<bool>`中，该容器包含所有单个`IObservable<bool>`容器中的项目。但在这个例子中，我们提供给`SelectMany`的输入只包含一个项目，这意味着没有收集工作要做。`SelectMany`将只调用我们的函数一次，并使用那个唯一的输入，并且这将只产生一个输出`IObservable<bool>`。`SelectMany`有责任返回一个`IObservable<bool>`，它包含它从对`SomeFunc`的单个调用中得到的单个`IObservable<bool>`中的所有项目。在这种情况下，没有其他进一步处理要做的了。因为只有一个对`SomeFunc`的调用，所以它不需要在这种情况下合并多个容器中的项目：由单个调用产生的那个单个输出包含应该在`SelectMany`要返回的容器中的所有内容。因此，我们可以直接使用单个输入项调用 `SomeFunc`。
 
-It would be odd if `SelectMany` did anything else. If `o1` were different in some way, that would mean one of three things:
+如果`SelectMany`做了别的事情，那会很奇怪。如果`o1`以某种方式不同，那意味着三种可能之一：
 
-* `o1` would contain items that aren't in `o2` (meaning it had somehow included items _not_ produced by `SomeFunc`)
-* `o2` would contain items that aren't in `o1` (meaning that `SelectMany` had omitted some of the items produced by `SomeFunc`)
-* `o1` and `o2` contain the same items but are different in some detectable sense specific to the monad type in use (e.g., the items came out in a different order)
+* `o1` 包含不在`o2`中的项目（意味着它以某种方式包含了未由`SomeFunc`产生的项目）
+* `o2` 包含不在`o1`中的项目（意味着`SelectMany`遗漏了一些由`SomeFunc`产生的项目）
+* `o1` 和 `o2` 包含相同的项目，但以某种依赖于使用的单子类型的特定方式可检测到的不同（例如，项目的顺序不同）
 
-So this law essentially formalizes the idea that `SelectMany` shouldn't add or remove items, or fail to preserve characteristics that the monad in use would normally preserve such as ordering. (Note that in .NET LINQ providers, this doesn't generally require these to be exactly the same objects. They normally won't be. It just means that they must represent exactly the same thing. For example, in this case `o1` and `o2` are both `IEnumerable<bool>`, so it means they should each produce exactly the same sequence of `bool` values.)
+因此，这个法则实质上规定了`SelectMany`不应该添加或移除项目，或者不应该保留单子使用应该保留的特性，比如顺序。（注意，在.NET LINQ提供者中，这通常不要求这些对象完全相同。它们通常不会。它只意味着它们必须代表完全相同的事物。例如，在这种情况下 `o1` 和 `o2` 都是`IEnumerable<bool>`，这意味着它们应该生成完全相同的 `bool` 值序列。）
 
-#### Monadic law 2: `Return` is a 'left-identity' for `SelectMany`
+#### 单子定律2：`Return`是`SelectMany`的“左同一性”
 
-This law means that if you pass `Return` as the function input to `SelectMany`, and then pass some value of the constructed monadic type in as the other argument, you should get that same value as the output. For example:
+这个法则意味着，如果将 `Return` 作为函数输入传递给 `SelectMany`，然后将某个已构建的单子类型值作为另一个参数传入，你应该得到相同的值作为输出。例如：
 
 ```csharp
-// These two should be identical.
+// 这两个应该是相同的。
 IObservable<int> o1 = GetAnySource();
 IObservable<int> o2 = o1.SelectMany(Observable.Return);
 ```
 
-By using `Return` as the function for `SelectMany`, we are essentially asking to take every item in the input container and to wrap it in its very own container (`Return` wraps a single item) and then to flatten all of those containers back out into a single container. We are adding a layer of wrapping and then removing it again, so it makes sense that this should have no effect.
+通过使用 `Return` 作为传递给 `SelectMany` 的函数，我们本质上是在请求将输入容器中的每个项都包装在它自己的容器中（`Return` 包装单个项），然后将所有这些容器重新展平成一个容器。我们增加了一层包装然后又删除它，因此理解这应该没有任何效果是有意义的。
 
-#### Monadic law 3: `SelectMany` should be, in effect, associative
+#### 单子法则3：`SelectMany` 应该是关联的
 
-Suppose we have two functions, `Tx1` and `Tx2`, each of a form suitable for passing as the argument to `SelectMany`. There are two ways we could apply these:
+假设我们有两个函数，`Tx1` 和 `Tx2`，每个函数都是适合传递给 `SelectMany` 的形式。我们可以有两种方式应用这些函数：
 
 ```csharp
-// These two should be identical.
+// 这两个应该是相同的。
 IObservable<int> o1 = source.SelectMany(x => Tx1(x).SelectMany(Tx2));
 IObservable<int> o2 = source.SelectMany(x => Tx1(x)).SelectMany(Tx2);
 ```
 
-The difference here is just a slight change in the placements of the parentheses: all that changes is whether the call to `SelectMany` on the right-hand side is invoked inside the function passed to the other `SelectMany`, or it is invoked on the result of the other `SelectMany`. This next example adjusts the layout, and also replaces the lambda `x => Tx1(x)` with the exactly equivalent `Tx1`, which might make the difference in structure a bit easier to see:
+这里的区别只是括号的位置略有变化：改变的只是右侧的 `SelectMany` 调用是在传递给其他 `SelectMany` 的函数内部调用的，还是在其他 `SelectMany` 的结果上调用的。以下例子调整了布局，并且用完全等效的 `Tx1` 替换了 lambda `x => Tx1(x)`，这可能使结构上的区别更容易看出：
 
 ```csharp
 IObservable<int> o1 = source
@@ -168,23 +168,23 @@ IObservable<int> o2 = source
     .SelectMany(Tx2);
 ```
 
-The third law says that either of these should have the same effect. It shouldn't matter whether the second `SelectMany` call (for `Tx2`) happens "inside" or after the first `SelectMany` call.
+第三个法则说这两种方式应该具有相同的效果。无论第二个 `SelectMany` 调用（用于 `Tx2`）发生在第一个 `SelectMany` 调用的“内部”还是之后，都不应有区别。
 
-An informal way to think about this is that `SelectMany` effectively applies two operations: a transformation and an unwrap. The transformation is defined by whatever function you pass to `SelectMany`, but because that function returns the monad type (in LINQ terms it returns a container which may contain any number of items) `SelectMany` unwraps each container returned when it passes an item to the function, in order to collect all the items together into the single container it ultimately returns. When you nest this sort of operation, it doesn't matter which order that unwrapping occurs in. For example, consider these functions:
+一个非正式的方式来思考这一点是，`SelectMany` 实质上应用了两个操作：一个转换和一个展开。转换是由你传递给 `SelectMany` 的任何函数定义的，但因为该函数返回单子类型（在LINQ术语中返回一个可能包含任意数量项目的容器），`SelectMany` 在将项目传递给该函数时展开每个返回的容器，以便将所有项目收集到最终返回的单个容器中。当你嵌套这种操作时，展开的顺序无关紧要。例如，考虑这些函数：
 
 ```csharp
 IObservable<int> Tx1(int i) => Observable.Range(1, i);
 IObservable<string> Tx2(int i) => Observable.Return(i.ToString());
 ```
 
-The first converts a number into a range of numbers of the same length. `1` becomes `[1]`, `3` becomes `[1,2,3]` and so on. Before we get to `SelectMany`, imagine what will happen if we use this with `Select` on an observable source that produces a range of numbers:
+第一个将一个数字转换为同样长度的数字范围。`1` 变为 `[1]`，`3` 变为 `[1, 2, 3]` 等。在我们到达 `SelectMany` 之前，想象如果我们用 `Select` 在产生数字范围的可观察源上使用这个函数会发生什么：
 
 ```csharp
 IObservable<int> input = Observable.Range(1, 3); // [1,2,3]
 IObservable<IObservable<int>> expandTx1 = input.Select(Tx1);
 ```
 
-We get a sequence of sequences. `expand2` is effectively this:
+我们得到了一系列的序列。`expand2` 实际上是这样的：
 
 ```
 [
@@ -194,13 +194,13 @@ We get a sequence of sequences. `expand2` is effectively this:
 ]
 ```
 
-If instead we had used `SelectMany`:
+如果我们曾经使用 `SelectMany`：
 
 ```csharp
 IObservable<int> expandTx1Collect = input.SelectMany(Tx1);
 ```
 
-it would apply the same transformation, but then flatten the results back out into a single list:
+它将应用相同的转换，但然后将结果展平回单个列表中：
 
 ```
 [
@@ -210,9 +210,9 @@ it would apply the same transformation, but then flatten the results back out in
 ]
 ```
 
-I've kept the line breaks to emphasize the connection between this and the preceding output, but I could just have written `[1,1,2,1,2,3]`.
+我保留了换行符以强调这与前面输出的联系，但我也可以只写成 `[1, 1, 2, 1, 2, 3]`。
 
-If we then want to apply the second transform, we could use `Select`:
+如果我们接着想应用第二次转换，我们可以使用 `Select`：
 
 ```csharp
 IObservable<IObservable<string>> expandTx1CollectExpandTx2 = expandTx1Collect
@@ -220,7 +220,7 @@ IObservable<IObservable<string>> expandTx1CollectExpandTx2 = expandTx1Collect
     .Select(Tx2);
 ```
 
-This passes each number in `expandTx1Collect` to `Tx2`, which converts it into a sequence containing a single string:
+这将每个 `expandTx1Collect` 中的数字传递给 `Tx2`，将其转换为只包含单个字符串的序列：
 
 ```
 [
@@ -230,7 +230,7 @@ This passes each number in `expandTx1Collect` to `Tx2`, which converts it into a
 ]
 ```
 
-But if we use `SelectMany` on that final position too:
+但如果我们也在最后的位置使用 `SelectMany`：
 
 ```csharp
 IObservable<string> expandTx1CollectExpandTx2Collect = expandTx1Collect
@@ -238,7 +238,7 @@ IObservable<string> expandTx1CollectExpandTx2Collect = expandTx1Collect
     .SelectMany(Tx2);
 ```
 
-it flattens these back out into just the strings:
+它将这些展平回单个字符串中：
 
 ```
 [
@@ -248,20 +248,20 @@ it flattens these back out into just the strings:
 ]
 ```
 
-The associative-like requirement says it shouldn't matter if we apply `Tx1` inside the function passed to the first `SelectMany` instead of applying it to the result of that first `SelectMany`. So instead of starting with this:
+关联性需求表示，如果我们在传递给第一个 `SelectMany` 的函数内部应用 `Tx1` 而不是将其应用于第一个 `SelectMany` 的结果，那么这不应有区别。因此，我们不是从这个开始：
 
 ```csharp
 IObservable<IObservable<int>> expandTx1 = input.Select(Tx1);
 ```
 
-we might write this:
+我们可能会写出这个：
 
 ```csharp
 IObservable<IObservable<IObservable<string>>> expandTx1ExpandTx2 =
     input.Select(x => Tx1(x).Select(Tx2));
 ```
 
-That's going to produce this:
+这将产生：
 
 ```
 [
@@ -271,14 +271,14 @@ That's going to produce this:
 ]
 ```
 
-If we change that to use `SelectMany` for the nested call:
+如果我们将内部调用改为使用 `SelectMany`：
 
 ```csharp
 IObservable<IObservable<string>> expandTx1ExpandTx2Collect =
     input.Select(x => Tx1(x).SelectMany(Tx2));
 ```
 
-That's going to flatten out the inner items (but we're still using `Select` on the outside, so we still get a list of lists) producing this:
+这将展平内部项目（但我们仍在外部使用 `Select`，所以我们仍然得到列表的列表）产生这个：
 
 ```
 [
@@ -288,14 +288,14 @@ That's going to flatten out the inner items (but we're still using `Select` on t
 ]
 ```
 
-And then if we change that first `Select` to `SelectMany`:
+然后，如果我们将第一个 `Select` 更改为 `SelectMany`：
 
 ```csharp
 IObservable<string> expandTx1ExpandTx2CollectCollect =
     input.SelectMany(x => Tx1(x).SelectMany(Tx2));
 ```
 
-it will flatten that outer layer of lists, giving us:
+它将展平最外层的列表，给我们带来：
 
 ```
 [
@@ -305,28 +305,28 @@ it will flatten that outer layer of lists, giving us:
 ]
 ```
 
-That's the same final result we got earlier, as the 3rd monad law requires.
+这与我们之前得到的最终结果相同，正如第三个单子法则所要求的。
 
-To summarize, the two processes here were:
+总结一下，这里的两个过程是：
 
-* expand and transform Tx1, flatten, expand and transform Tx2, flatten
-* expand and transform Tx1, expand and transform Tx2, flatten, flatten
+* 展开并转换 Tx1，展平，展开并转换 Tx2，展平
+* 展开并转换 Tx1，展开并转换 Tx2，展平，展平
 
-Both of these apply both transforms, and flatten out the extra layers of containment added by these transforms, and so although the intermediate steps looked different, we ended up with the same result, because it doesn't matter whether you unwrap after each transform, or you perform both transforms before unwrapping.
+这两个过程都应用了两次转换，并展平了这些转换添加的额外的包含层，因此尽管中间步骤看起来不同，我们最终得到了相同的结果，因为无论你是在每次转换后都展开，还是在进行所有转换后再展开，都没有关系。
 
-#### Why these laws matter
+#### 为什么这些法则很重要
 
-These three laws directly reflect laws that hold true for composition of straightforward functions over numbers. If we have two functions, $f$, and $g$, we could write a new function $h$, defined as $g(f(x))$. This way of combining function is called _composition_, and is often written as $g \circ f$. If the identity function is called $id$, then the following statements are true:
+这三个法则直接反映了适用于数字上函数组合的法则。如果我们有两个函数，\(f\) 和 \(g\)，我们可以写一个新的函数 \(h\)，定义为 \(g(f(x))\)。这种组合函数的方式被称为 _组合_，通常写为 \(g \circ f\)。如果恒等函数称为 \(id\)，那么以下陈述是真实的：
 
-* $id \circ f$ is equivalent to just $f$
-* $f \circ id$ is equivalent to just $f$
-* $(f \circ g) \circ s$ is equivalent to $f \circ (g \circ s)$
+* \(id \circ f\) 等同于只有 \(f\)
+* \(f \circ id\) 等同于只有 \(f\)
+* \((f \circ g) \circ s\) 等同于 \(f \circ (g \circ s)\)
 
-These correspond directly to the three monad laws. Informally speaking, this reflects the fact that the monadic bind operation (`SelectMany`) has deep structurally similarity to function composition. This is why we can combine LINQ operators together freely.
+这些直接对应于三个单子法则。非正式地说，这反映了单子的 bind 操作（`SelectMany`）在结构上与函数组合有深刻的相似性。这就是为什么我们可以自由组合 LINQ 操作符的原因。
 
-### Recreating other operators with `SelectMany`
+### 使用 `SelectMany` 重建其他操作符
 
-Remember that there are three mathematical concepts at the heart of LINQ: monads, anamorphisms and catamorphisms. So although the preceding discussion has focused on `SelectMany`, the significance is much wider because we can express other standard LINQ operators in terms of these primitives. For example, this shows how we could implement [`Where`](05_Filtering.md#where) using just `Return` and `SelectMany`:
+记住，LINQ 的核心是三个数学概念：单子、展子和合子。因此，尽管前面的讨论重点是 `SelectMany`，但它的意义要广泛得多，因为我们可以用这些原语表达其他标准的 LINQ 操作符。例如，这展示了我们如何仅使用 `Return` 和 `SelectMany` 实现 [`Where`](05_Filtering.md#where)：
 
 ```csharp
 public static IObservable<T> Where<T>(this IObservable<T> source, Func<T, bool> predicate)
@@ -338,7 +338,7 @@ public static IObservable<T> Where<T>(this IObservable<T> source, Func<T, bool> 
 }
 ```
 
-This implements `Select`:
+这实现了 `Select`：
 
 ```csharp
 public static IObservable<TResult> Select<TSource, TResult>(
@@ -348,20 +348,20 @@ public static IObservable<TResult> Select<TSource, TResult>(
 }
 ```
 
-Some operators require anamorphisms or catamorphisms, so let's look at those now.
+有些操作符需要展子或合子，所以现在让我们看一下这些。
 
-## Catamorphisms
+## 合子（Catamorphisms）
 
-A catamorphism is essentially a generalization of any kind of processing that takes every item in a container into account. In practice in LINQ, this typically means processes that inspect all of the values, and produce a single value as a result, such as [Observable.Sum](07_Aggregation.md#sum). More generally, aggregation of any kind constitutes catamorphism. The mathematical definition of catamorphism is more general than this—it doesn't necessarily have to reduce things all the way down to a single value for example—but for the purposes of understanding LINQ, this container-oriented viewpoint is the most straightforward way to think about this construct.
+合子本质上是对任何类型的处理的泛化，它考虑到了容器中的每个项目。在 LINQ 的实践中，这通常意味着检查所有的值，并产生一个结果值，如 [Observable.Sum](07_Aggregation.md#sum)。更广泛地说，任何形式的聚合都构成合子。合子的数学定义比这更泛化——例如，它不一定要将事物简化为单一值——但为了理解 LINQ，这种以容器为导向的观点是最直接的方法来考虑这个结构。
 
-Catamorphisms are one of the fundamental building blocks of LINQ because you can't construct catamorphisms out of the other elements. But there are numerous LINQ operators that can be built out of LINQ's most elemental catamorphism, the [`Aggregate`](07_Aggregation.md#aggregate) operator. For example, here's one way to implement `Count` in terms of `Aggregate`:
+合子是 LINQ 的基本构建块之一，因为你不能仅用其他元素构造合子。但有许多 LINQ 操作符可以由 LINQ 最基本的合子，[`Aggregate`](07_Aggregation.md#aggregate) 操作符构建。例如，这是用 `Aggregate` 实现 `Count` 的一种方式：
 
 ```csharp
 public static IObservable<int> MyCount<T>(this IObservable<T> items)
     => items.Aggregate(0, (total, _) => total + 1);
 ```
 
-We could implement `Sum` thus:
+我们可以这样实现 `Sum`：
 
 ```csharp
 public static IObservable<T> MySum<T>(this IObservable<T> items)
@@ -369,69 +369,69 @@ public static IObservable<T> MySum<T>(this IObservable<T> items)
     => items.Aggregate(T.Zero, (total, x) => x + total);
 ```
 
-This is more flexible than the similar sum example I showed in the [Aggregation chapter](07_Aggregation.md), because that worked only with an `IObservable<int>`. Here I'm using the _generic math_ feature added in C# 11.0 and .NET 7.0 to enable `MySum` to work across any number-like type. But the basic principle of operation is the same.
+这比我在 [聚合章节](07_Aggregation.md) 中展示的类似 sum 示例更灵活，因为那个只适用于 `IObservable<int>`。在这里，我使用了 C# 11.0 和 .NET 7.0 中新增的 _泛型数学_ 功能，使 `MySum` 能够适用于任何类似数字的类型。但操作原理基本相同。
 
-If you came here for the theory, it probably won't be enough for you just to see that the various aggregating operators are all special cases of `Aggregate`. What really is a catamorphism? One definition is as "the unique homomorphism from an initial algebra into some other algebra" but as is typical with category theory, that's one of those explanations that's easiest to understand if you already understand the concepts it's trying to describe. If you try to understand this description in terms of the school mathematics form of algebra, in which we write equations where some values are represented by letters, it's hard to make sense of this definition. That's because catamorphisms take a much more general view of what constitutes "algebra," meaning essentially some system by which expressions of some kind can be constructed and evaluated.
+如果您是为了理论而来，仅仅看到各种聚合操作符都是 `Aggregate` 的特例可能不足以满足您。合子究竟是什么呢？其中一个定义是“从初始代数到某种其他代数的唯一同态”，但就像范畴理论通常的情况一样，这种解释最容易理解的前提是你已经理解了它试图描述的概念。如果你试图用学校数学形式的代数理解这个定义，其中我们写出一些值由字母表示的方程，很难理解这个定义。这是因为合子采用了更广泛的视角来看待“代数”的含义，基本上意味着某种形式的表达式可以被构建和评估。
 
-To be more precise, Catamorphisms are described in relation to something called an F-algebra. That's a combination of three things:
+更准确地说，合子是相对于某种称为 F-代数的东西来描述的。这是三个东西的组合：
 
-1. a Functor, _F_, that defines some sort of structure over some category _C_
-2. some object _A_ in the category _C_
-3. a morphism from _F A_ to _A_ that effectively evaluates the structure
+1. 一个函数子（Functor）_F_，它在某个范畴 _C_ 上定义了某种结构
+2. 范畴 _C_ 中的某个对象 _A_
+3. 从 _F A_ 到 _A_ 的态射，有效地评估结构
 
-But that opens up more questions than it answers. So let's start with the obvious one: what's a Functor? From a LINQ perspective, it's essentially anything that implements `Select`. (Some programming systems call this `fmap`.) From our container-oriented viewpoint it's two things: 1) a type constructor that is container-like (e.g. something like `IEnumerable<T>` or `IObservable<T>`) and 2) some means of applying a function to everything in the container. So if you have a function that converts from `string` to `int`, a Functor lets you apply that to everything it contains in a single step.
+但这开启了比它回答的更多的问题。所以让我们从一个明显的问题开始：什么是函数子？从 LINQ 的角度看，它本质上是任何实现了 `Select` 的东西。（一些编程系统称这为 `fmap`。）从我们以容器为导向的视角来看，它是两个东西：1) 一个类似容器的类型构造器（例如，像 `IEnumerable<T>` 或 `IObservable<T>` 这样的东西）和 2) 一种将函数应用于容器中的所有内容的方法。因此，如果你有一个从 `string` 转换为 `int` 的函数，一个函数子让你可以一次性地将其应用于它所包含的所有内容。
 
-The combination of `IEnumerable<T>` and its `Select` extension method is a Functor. You can use `Select` to convert an `IEnumerable<string>` to an `IEnumerable<int>`. `IObservable<T>` and its `Select` form another Functor, and we can use these to get from an `IObservable<string>` to an `IObservable<int>`. What about that "over some category _C_" part? That alludes to the fact that the mathematical description of a Functor is rather broader. When developers use category theory, we generally stick to a category that represents types (as in programming language types like `int`) and functions. (Strictly speaking a Functor maps from one category to another, so in the most general case, a Functor maps objects and morphisms in some category _C_ into objects and morphisms in some category _D_. But for programming purposes, we are always using the category representing types, so for the Functors we use _C_ and _D_ will be the same thing. Strictly speaking this means we should be calling them Endofunctors, but nobody seems to bother. In practice we use the name for the more general form, Functor, and it's just taken as read that we mean an Endofunctor over the category of types and functions.)
+合子配合 `IEnumerable<T>` 和其 `Select` 扩展方法是一个函数子。你可以使用 `Select` 将一个 `IEnumerable<string>` 转换为一个 `IEnumerable<int>`。`IObservable<T>` 和它的 `Select` 形式构成了另一个函数子，我们可以利用这些从 `IObservable<string>` 到 `IObservable<int>`。关于 "在某个范畴 _C_ 上" 的部分呢？这提示了数学描述中函数子的范围更广。当开发者使用范畴理论时，我们通常坚持使用代表类型（如编程语言中的 `int` 类型）和函数的范畴。（严格来说，函数子从一个范畴映射到另一个范畴，所以在最一般的情况下，函数子将某个范畴 _C_ 中的对象和态射映射到某个范畴 _D_ 中的对象和态射。但出于编程的目的，我们总是使用代表类型的范畴，所以对于我们使用的函数子来说，_C_ 和 _D_ 将是相同的东西。严格来说，这意味着我们应该称它们为自函子（Endofunctors），但似乎没有人在意。实际上我们使用了更一般形式的名字，函数子（Functor），并默认我们指的是自函子在类型和函数的范畴上。）
 
-So, that's the Functor part. Let's move onto 2, "some object _A_ in the category _C_." Well _C_ is the Functor's category, and we just established that objects in that category are types, so _A_ here might be the `string` type. If our chosen Functor is the combination of `IObservable<T>` and its `Select` method, then _F A_ would be `IObservable<string>`.
+那么，这就是函数子的部分。接下来是 2，“_C_ 范畴中的某个对象 _A_”。好，_C_ 是函数子的范畴，我们刚才确定该范畴中的对象是类型，所以 _A_ 可能是 `string` 类型。如果我们选择的函数子是 `IObservable<T>` 和它的 `Select` 方法的组合，那么 _F A_ 将是 `IObservable<string>`。
 
-So what about the "morphisms" in 3? Again, for our purposes we're just using Endofunctors over types and functions, so in this context, morphisms are just functions. So we could recast the definition of an F-algebra in more familiar terms as:
+那么“态射”又是什么呢？再次，就我们的目的而言，我们只使用类型和函数的自函数子，因此在这种情况下，态射只是函数。因此，我们可以将 F-代数的定义重新表述为更熟悉的术语：
 
-1. some container-like generic type such as `IObservable<T>`
-2. an item type `A` (e.g., `string`, or `int`)
-3. a function that takes an `IObservable<A>` and returns a value of type `A` (e.g. `Observable.Aggregate<A>`)
+1. 一些类似容器的泛型类型，如 `IObservable<T>`
+2. 一个项类型 `A`（例如，`string` 或 `int`）
+3. 一个接受 `IObservable<A>` 并返回类型为 `A` 的值的函数（例如, `Observable.Aggregate<A>`）
 
-This is a good deal more specific. Category theory is typically concerned with capturing the most general truths about mathematical structures, and this reformulation throws that generality away. However, from the perspective of a programmer looking to lean on mathematical theory, this is fine. As long as what we're doing fits the F-algebra mould, all the general results that mathematicians have derived will apply to our more specialized application of the theory.
+这更具体一些。范畴理论通常关注于捕捉数学结构的最一般真理，并且这种改革将这种普遍性抛弃了。然而，从一个寻求依靠数学理论的程序员的角度来看，这是可以的。只要我们所做的事情符合 F-代数的模式，数学家们推导出的所有一般结果都将适用于我们对理论的更专业的应用。
 
-Nonetheless, to give you an idea of the sorts of things the general concept of F-algebras can enable, it's possible for the Functor to be a type that represents expressions in a programming language, and you could create an F-algebra that evaluates those expressions. That's a similar idea to LINQ's `Aggregate`, in that it walks over the entire structure represented by the Functor (every element in a list if it's an `IEnumerable<T>`; every subexpression if you're representing an expression) and reduces the whole thing to a single value, but instead of our Functor representing a sequence of things, it has a more complex structure: expressions in some programming language.
+不过，为了给你展示一般概念的 F-代数 可以实现的种类，有可能让函数子成为表示编程语言中表达式的类型，你可以创建一个 F-代数，对这些表达式进行评估。这与 LINQ 的 `Aggregate` 类似，因为它遍历 Functor 表示的整个结构（如果是 `IEnumerable<T>`，就是列表中的每个元素；如果你是表示表达式，就是每个子表达式）并将整个结构简化为单一值，但代替我们的函数子表示一系列事物，它具有更复杂的结构：编程语言中的表达式。
 
-So that's an F-algebra. And from a theory point of view, it's important that the third part doesn't necessarily have to reduce things. Theoretically, the types can be recursive, with the item type _A_ being _F A_. (This is important for inherently recursive structures such as expressions.) And there is typically a maximally general F-algebra in which the function (or morphism) in 3 only deals with the structure, and which doesn't actually perform any reduction at all. (E.g., given some expression syntax, you could imagine code that embodies all of the knowledge required to walk through every single subexpression of an expression, but which has no particular opinion on what processing to apply.) The idea of a catamorphism is that there are less other F-algebras available for the same Functor that are less general.
+所以，这就是 F-代数。从理论角度看，重要的是第三部分不一定需要简化。理论上，类型可以是递归的，项目类型 _A_ 可以是 _F A_。这对于诸如表达式这样的固有递归结构很重要，并且通常有一个在函数中只处理结构，不实际执行任何简化的最一般 F-代数。这些想法的一般化就是合子概念，即存在同样函数子的其他不那么一般的 F-代数。
 
-For example, with `IObservable<T>` the general purpose notion is that every item produced by some source can be processed by repeatedly applying some function of two arguments, one of which is a value of type `T` from the container, and the other of which is some sort of accumulator, representing all information aggregated so far. And this function would return the updated accumulator, ready to be passed into the function again along with the next `T`. And then there are more specific forms in which specific accumulation logic (e.g., summation, or determination of a maximum value) is applied. Technically, the catamorphism here is the connection from the general form to the more specialized form. But in practice it's common to refer to the specific specialized forms (such as [`Sum`](07_Aggregation.md#sum) or [`Average`](07_Aggregation.md#average)) as catamorphisms.
+例如，对于 `IObservable<T>`，一般概念是每个由某个源产生的项目可以通过反复应用某个函数来处理，这个函数有两个参数，一个是容器中的类型 `T` 的值，另一个是某种累加器，代表到目前为止累积的所有信息。这个函数将返回更新的累加器，准备好与下一个 `T` 一起再次传递给该函数。然后有更具体的形式，其中应用了具体的积累逻辑（例如，求和或确定最大值）。从技术上讲，这里的合子是从一般形式到更具体形式的连接。但在实践中，常常将具体的特殊形式（如 [`Sum`](07_Aggregation.md#sum) 或 [`Average`](07_Aggregation.md#average)）称为合子。
 
-### Remaining inside the container
+### 保持在容器内
 
-Although in general a catamorphism can strip off the container (e.g., `Sum` for `IEnumerable<int>` produces an `int`), this isn't absolutely necessary, and with Rx most catamorphisms don't do this. As described in the threading and scheduling chapter's [Lock-ups](11_SchedulingAndThreading.md#lock-ups) section, blocking some thread while waiting for a result that will only occur once an `IObservable<T>` has done something in particular (e.g., if you want to calculate the sum of items, you have to wait until you've seen all the items) is a recipe for deadlock in practice.
+虽然合子一般可以脱离容器（例如，`IEnumerable<int>` 的 `Sum` 产生一个 `int`），但这并非绝对必要，并且在 Rx 中，大多数合子不这样做。正如在线程和调度章节的 [Lock-ups](11_SchedulingAndThreading.md#lock-ups) 部分所述，当某个 `IObservable<T>` 必须做某事（例如，如果你想计算项目的总和，你必须等到你看到所有项目）时，阻塞某个线程以等待结果是实际操作中的死锁风险。
 
-For this reason, most of the catamorphisms perform some sort of reduction but continue to produce a result wrapped in an `IObservable<T>`.
+因此，大多数合子执行某种简化，但继续产生包裹在 `IObservable<T>` 中的结果。
 
-## Anamorphisms
+## 展子（Anamorphisms）
 
-Anamorphisms are, roughly speaking, the opposite of catamorphisms. While catamorphisms essentially collapse some sort of structure down to something simpler, an anamorphism expands some input into a more complex structure. For example, given some number (e.g., 5) we could imagine a mechanism for turning that into a sequence with the specified number of elements in it (e.g., [0,1,2,3,4]).
+粗略地说，展子与合子相反。尽管合子基本上将某种结构简化为更简单的东西，展子则将某些输入扩展为更复杂的结构。例如，给定某个数字（例如，5），我们可以想象一种机制，将其转换为具有指定数量元素的序列（例如，[0,1,2,3,4]）。
 
-In fact we don't have to imagine such a thing: that's what [`Observable.Range`](03_CreatingObservableSequences.md#observablerange) does.
+实际上我们不必想象这样的事物：这正是 [`Observable.Range`](03_CreatingObservableSequences.md#observablerange) 所做的。
 
-We could think of the monadic `Return` operation as a very simple anamorphism. Given some value of type `T`, [`Observable.Return`](03_CreatingObservableSequences.md#observablereturn) expands this into an `IObservable<T>`. Anamorphisms are essentially the generalization of this sort of idea.
+我们可以将单子的 `Return` 操作视为一个非常简单的展子。给定类型 `T` 的某个值，[`Observable.Return`](03_CreatingObservableSequences.md#observablereturn) 将其扩展为一个 `IObservable<T>`。展子本质上是此类想法的泛化。
 
-The mathematical definition of an anamorphism is "the assignment of a coalgebra to its unique morphism to the final coalgebra of an endofunctor." This is the "dual" of the definition of a catamorphism, which from a category theory point of view essentially means that you reverse the direction of all of the morphisms. In our not-completely-general application of category theory, the morphisms in question here are the reduction of items to some output in a catamorphism, and so with an anamorphism this turns into the expansion of some value into the some instance of the container type (e.g., from an `int` to an `IObservable<int>`).
+展子的数学定义是“将一个余代数分配给其唯一的态射到一个自函子的最终余代数”。这是合子定义的“对偶”，从范畴理论的角度来看，基本上意味着所有态射的方向都相反。在我们并非完全泛化的范畴理论应用中，这里的态射是合子中将项目简化为某个输出的态射，因此在展子中，这变成了将某个值扩展为容器类型的某个实例（例如，从 `int` 到 `IObservable<int>`）。
 
-I'm not going to go into as much detail as with catamorphisms. Instead, I'm going to point out the key part at the heart of this: the most general F-algebra for a Functor embodies some understanding of the essential structure of the Functor, and catamorphisms make use of that to define various reductions. Similarly, the most general coalgebra for a Functor also embodies some understanding of the essential structure of the Functor and anamorphisms make use of that to define various expansions.
+我不打算像合子那样详细介绍，而是指出这个核心部分：一个函数子的最一般 F-代数体现了对函数子的本质结构的理解，合子利用 этто定义各种简化。类似地，一个函数子的最一般余代数也体现了对函数子的本质结构的理解，展子利用这一点来定义各种扩展。
 
-[`Observable.Generate`](03_CreatingObservableSequences.md#observablegenerate) represents this most general capability: it has the capability to produce an `IObservable<T>` but needs to be supplied with some specialized expansion function to generate any particular observable.
+[`Observable.Generate`](03_CreatingObservableSequences.md#observablegenerate) 代表了这种最一般的能力：它具有生成一个 `IObservable<T>` 的能力，但需要提供一些专门的扩展函数来生成任何特定的可观察对象。
 
-## So much for theory
+## 理论的终结
 
-Now we've reviewed the theoretical concepts behind LINQ, let's step back and look at how we use them. We have three kinds of operations:
+现在我们已经回顾了 LINQ 背后的理论概念，让我们回过头来看看我们如何使用它们。我们有三种操作：
 
-* Anamorphisms enter the sequence: `T1 --> IObservable<T2>`
-* Bind modifies the sequence. `IObservable<T1> --> IObservable<T2>`
-* Catamorphisms leave the sequence. Logically `IObservable<T1> --> T2`, but in practice typically `IObservable<T1> --> IObservable<T2>` where the output observable produces just a single value
+* 展子进入序列：`T1 --> IObservable<T2>`
+* Bind 修改序列。`IObservable<T1> --> IObservable<T2>`
+* 合子离开序列。逻辑上是 `IObservable<T1> --> T2`，但实际上通常是 `IObservable<T1> --> IObservable<T2>`，其中输出可观察对象只产生单一值
 
-As an aside, bind and catamorphism were made famous by Google's [MapReduce](http://en.wikipedia.org/wiki/MapReduce) framework from Google. Here Google, refer to Bind and Catamorphism by names more commonly used in some functional languages, Map and Reduce.
+顺便说一下，bind 和 catamorphism 由谷歌的 [MapReduce](http://en.wikipedia.org/wiki/MapReduce) 框架使广为人知。在这里，谷歌引用了在某些函数式语言中更常用的名称，Map 和 Reduce。
 
-Most Rx operators are actually specializations of the higher order functional concepts. To give a few examples:
+大多数 Rx 操作符实际上都是更高阶函数概念的特例。给出一些例子：
 
-- Anamorphisms:
+- 展子（Anamorphisms）:
   - [`Generate`](03_CreatingObservableSequences.md#observablegenerate)
   - [`Range`](03_CreatingObservableSequences.md#observablerange)
   - [`Return`](03_CreatingObservableSequences.md#observablereturn)
@@ -439,42 +439,42 @@ Most Rx operators are actually specializations of the higher order functional co
   - [`SelectMany`](06_Transformation.md#selectmany)
   - [`Select`](06_Transformation.md#select)
   - [`Where`](05_Filtering.md)
-- Catamorphism:
+- 合子（Catamorphism）:
   - [`Aggregate`](07_Aggregation.md#aggregate)
   - [`Sum`](07_Aggregation.md#sum)
-  - [`Min` and `Max`](07_Aggregation.md#min-and-max)
+  - [`Min` 和 `Max`](07_Aggregation.md#min-and-max)
 
 ## Amb
 
-The `Amb` method was a new concept to me when I started using Rx. This function was first introduced by [John McCarthy](https://en.wikipedia.org/wiki/John_McCarthy_(computer_scientist)), in his 1961 paper ['A Basis for a Mathematical Theory of Computation'](https://www.cambridge.org/core/journals/journal-of-symbolic-logic/article/abs/john-mccarthy-a-basis-for-a-mathematical-theory-of-computation-preliminary-report-proceedings-of-the-western-joint-computer-conference-papers-presented-at-the-joint-ireaieeacm-computer-conference-los-angeles-calif-may-911-1961-western-joint-computer-conference-1961-pp-225238-john-mccarthy-a-basis-for-a-mathematical-theory-of-computation-computer-programming-and-formal-systems-edited-by-p-braffort-and-d-hirschberg-studies-in-logic-and-the-foundations-of-mathematics-northholland-publishing-company-amsterdam1963-pp-3370/D1AD4E0CDB7FBE099B04BB4DAF24AFFA) in the Proceedings of the Western Joint Computer Conference. (A digital copy of this is hard to find, but a later version was published in [1963](http://www-formal.stanford.edu/jmc/basis1.pdf) in 'Computer Programming and Format Systems'.) It is an abbreviation of the word _Ambiguous_. Rx diverges slightly from normal .NET class library naming conventions here in using this abbreviation, partly because `amb` is the established name for this operator, but also as a tribute to McCarthy, whose work was an inspiration for the design of Rx.
+当我开始使用 Rx 时，`Amb` 方法是一个我不熟悉的新概念。这个函数最初由 [John McCarthy](https://en.wikipedia.org/wiki/John_McCarthy_(computer_scientist)) 在其 1961 年的论文 [《计算的数学理论基础》](https://www.cambridge.org/core/journals/journal-of-symbolic-logic/article/abs/john-mccarthy-a-basis-for-a-mathematical-theory-of-computation-preliminary-report-proceedings-of-the-western-joint-computer-conference-papers-presented-at-the-joint-ireaieeacm-computer-conference-los-angeles-calif-may-911-1961-western-joint-computer-conference-1961-pp-225238-john-mccarthy-a-basis-for-a-mathematical-theory-of-computation-computer-programming-and-formal-systems-edited-by-p-braffort-and-d-hirschberg-studies-in-logic-and-the-foundations-of-mathematics-northholland-publishing-company-amsterdam1963-pp-3370/D1AD4E0CDB7FBE099B04BB4DAF24AFFA) 中首次介绍。这是个缩写，取自单词 _Ambiguous_。Rx 在这里稍微偏离了正常的 .NET 类库命名约定，部分是因为 `amb` 是这个操作符的既定名称，但也作为对 McCarthy 工作的致敬，他的工作启发了 Rx 的设计。
 
-But what does `Amb` do? The basic idea of an [_ambiguous function_](http://www-formal.stanford.edu/jmc/basis1/node7.html) is that we are allowed to define multiple ways to produce a result, and that some or all of these might in practice prove unable to produce a result. Suppose we've defined some ambiguous function called `equivocate`, and perhaps that for some particular input value, all of `equivocate`'s component parts—all the different ways we gave it of calculating a result—are unable to process the value. (Maybe every one of them divides a number by the input. If we supply an input of `0`, then none of the components can produce a value for this input because they would all attempt to divide by 0.) In cases such as these where none of `equivocate`'s component parts is able to produce a result, `equivocate` itself is unable to produce a result. But suppose we supply some input where exactly one of its component parts is able to produce a result. In that case this result becomes the result of `equivocate` for that input.
+但 `Amb` 究竟做什么呢？[_ambiguous function_](http://www-formal.stanford.edu/jmc/basis1/node7.html) 的基本思想是我们被允许定义多种产生结果的方式，这些方式在实际操作中可能无法产生结果。假设我们定义了一些名为 `equivocate` 的模糊函数，也许对于某个特定的输入值，`equivocate` 的所有组成部分——我们提供的所有不同的计算结果方式——都无法处理该值。（也许每个部分都通过输入来除以一个数。如果我们提供一个输入为 `0` 的值，那么这些组成部分都无法为此输入产生值，因为它们都将尝试除以 0。）在这些情况下，`equivocate` 本身无法产生结果。但假设我们提供了某个输入，其中 `equivocate` 的确切一个组成部分能够产生结果。在这种情况下，这个结果将成为 `equivocate` 对该输入的结果。
 
-So in essence, we're supplying a bunch of different ways to process the input, and if exactly one of those is able to produce a result, we select that result. And if none of the ways of processing the input produces anything, then our ambiguous function also produces nothing.
+因此，从本质上讲，我们提供了许多不同的方式来处理输入，如果其中确切一个能够产生结果，我们选择那个结果。如果处理输入的方式都没有产生任何东西，那么我们的模糊函数也不产生任何东西。
 
-Where it gets slightly more weird (and where Rx departs from the original definition of `amb`) is when more than one of an ambiguous function's constituents produces a result. In McCarthy's theoretical formulation, the ambiguous function effectively produces all of the results as possible outputs. (This is technically known as _nondeterministic_ computation, although that name can be misleading: it makes it sound like the result will be unpredictable. But that's not what we mean by _nondeterministic_ when talking about computation. It is as though the computer evaluating the ambiguous function clones itself, producing a copy for each possible result, continuing to execute every single copy. You could imagine an multithreaded implementation of such a system, where every time an ambiguous function produces multiple possible results, we create that many new threads so as to be able to evaluate all possible outcomes. This is a reasonable mental model for nondeterministic computation, but it's not what actually happens with Rx's `Amb` operator.) In the kinds of theoretical work ambiguous functions were introduced for, the ambiguity often vanishes in the end. There may have been an enormous number of ways in which a computation could have proceeded, but they might all, finally, produce the same result. However, such theoretical concerns are taking us away from what Rx's `Amb` does, and how we might use it in practice.
+在一种模糊函数的构成部分能产生多个结果的情况下略显怪异（在这里 Rx 与原始定义的 `amb` 有所偏离）是 McCarthy 的理论制定中，这种模糊函数实际上会产生所有可能的输出作为可能输出。（这在技术上被称为 _非确定性_ 计算，尽管这个名字可能会产生误导：它听起来像是结果将是不可预测的。但我们在谈论计算时说的 _非确定性_ 并不是指这个意思。就好像评估模糊函数的计算机克隆了自己，为每个可能的结果产生一个副本，继续执行每个副本。你可以想象这种系统的多线程实现，每当一个模糊函数产生多个可能结果时，我们创建那么多新线程以便能够评估所有可能的结果。这是一个非确定性计算的合理心理模型，但这不是 Rx 的 `Amb` 操作符实际发生的情况。) 在模糊函数被引入的那些理论工作中，这种模糊经常在最后消失。可能有无数计算方式可以进行，但它们可能最终都产生相同的结果。然而，这类理论问题将我们带离了 Rx 的 `Amb` 实际做什么以及我们如何在实际中使用它。
 
-[Rx's `Amb`](09_CombiningSequences.md#amb) provides the behaviour described in the cases where either none of the inputs produces anything, or exactly one of them does. However, it makes no attempt to support non-deterministic computation, so its handling of the case where multiple constituents are able to produce value is oversimplified, but then McCarthy's `amb` was first and foremost an analytical construct, so any practical implementation of it is always going to fall short.
+[Rx 的 `Amb`](09_CombiningSequences.md#amb) 提供了在输入都没有产生任何东西或确切一个输入产生了东西的情况下描述的行为。然而，它没有尝试支持非确定性计算，所以它处理多个构成部分能产生值的情况的方式过于简化，但 McCarthy 的 `amb` 首先是一个分析构造，所以任何实际的实现都无法达到。
 
-## Staying inside the monad
+## 保持在单子内
 
-It can be tempting to flip between programming styles when using Rx. For the parts where it's easy to see how Rx applies, then we will naturally use Rx. But when things get tricky, it might seem easiest to change tracks. It might seem like the easiest thing to do would be to `await` an observable, and then proceed with ordinary sequential code. Or maybe it might seem simplest to make callbacks passed to operators like `Select` or `Where` perform operations in addition to their main jobs—to have side effects that do useful things.
+使用 Rx 时，可能会试图在编程风格之间切换。对于容易看出 Rx 应用的部分，我们自然会使用 Rx。但当事情变得棘手时，改变策略似乎是最简单的。可能看起来最简单的做法是 `await` 一个 observable，然后继续执行普通的顺序代码。或者也许似乎最简单的做法是让传递给像 `Select` 或 `Where` 这样的操作符的回调执行额外的操作——让它们具有实际效用的副作用。
 
-Although this can sometimes work, switching between paradigms should be done with caution, as this is a common root cause for concurrency problems such as deadlock and scalability issues. The basic reason for this is that for as long as you remain within Rx's way of doing things, you will benefit from the basic soundness of the mathematical underpinnings. But for this to work, you need to use a functional style. Functions should process their inputs and deterministically produce outputs based on those inputs, and they should neither depend on external state nor change it. This can be a tall order, and it won't always be possible, but a lot of the theory falls apart if you break these rules. Composition doesn't work as reliably as it can. So using a functional style, and keeping your code within Rx's idiom will tend to improve reliability.
+虽然这有时可以工作，但应谨慎交换 Paradigms，因为这是并发问题（例如死锁和可扩展性问题）的常见根源。基本原因是只要你保持在 Rx 的做事方式中，你就会从数学基础的基本健全性中受益。但要使其发挥作用，你需要使用函数式风格。函数应该处理它们的输入并根据这些输入确定性地产生输出，它们既不应该依赖于外部状态也不应该改变它。这可能是一项艰巨的任务，并且不总是可能的，但如果你打破这些规则，大部分理论就会崩溃。组合不会像它可能的那样可靠地工作。因此，使用函数式风格并保持代码在 Rx 的习惯用法中将倾向于提高可靠性。
 
-## Issues with side effects
+## 副作用的问题
 
-Programs always have to have some side effects if they are to do anything useful—if the world is no different as a result of a program having run, then you may as well not have run it—so it can be useful to explore the issues with side effects, so that we can know how best to deal with them when they are necessary. So we will now discuss the consequences of introducing side effects when working with an observable sequence. A function is considered to have a side effect if, in addition to any return value, it has some other observable effect. Generally the 'observable effect' is a modification of state. This observable effect could be:
+如果程序运行的结果对世界没有任何影响，那么你可能一样不运行它——所以探索副作用的问题是有用的，这样我们就可以知道在必要时如何最好地处理它们。如果函数除了任何返回值之外还有其他可观察的效果，则认为该函数具有副作用。通常，‘可观察的效果’是状态的修改。这种可观察的效果可能是：
 
-* modification of a variable with a wider scope than the function (i.e. global, static or perhaps an argument)
-* I/O such as a read from or modifying a file, sending or receiving network messages, or updating a display
-* causing physical activity, such as when a vending machine dispenses an item, or directs a coin into its coin box
+* 修改作用域比函数更广的变量（即全局、静态或可能是一个参数）
+* I/O 操作，如读取或修改文件、发送或接收网络消息或更新显示
+* 导致物理活动，如自动售货机分发物品或将硬币导入其硬币盒
 
-Functional programming in general tries to avoid creating any side effects. Functions with side effects, especially those which modify state, require the programmer to understand more than just the inputs and outputs of the function. Fully understanding the function's operation could entail knowing the full history and context of the state being modified. This can greatly increase the complexity of a function, and making it harder to correctly understand and maintain.
+函数式编程通常试图避免创建任何副作用。特别是那些修改状态的带有副作用的函数，需要程序员了解不仅仅是函数的输入和输出。完全理解函数的操作可能需要了解被修改状态的完整历史和上下文。这可能大大增加函数的复杂性，使其更难正确理解和维护。
 
-Side effects are not always intentional. An easy way to reduce accidental side effects is to reduce the surface area for change. Here are two simple action coders can take: reduce the visibility or scope of state and make what you can immutable. You can reduce the visibility of a variable by scoping it to a code block like a method (instead of a field or property). You can reduce visibility of class members by making them private or protected. By definition immutable data can't be modified so it can't exhibit side effects. These are sensible encapsulation rules that will dramatically improve the maintainability of your Rx code.
+副作用并不总是有意的。减少意外副作用的一种简单方法是减少变化的表面积。这里有两个程序员可以采取的简单行动：减少状态的可见性或范围，并使你能够不变的东西不变。你可以通过将变量的范围限制在代码块中，如方法（而不是字段或属性），来减少变量的可见性。你可以通过将类成员设为 private 或 protected 来减少可见性。从定义上讲，不可变数据不能被修改，因此它不能表现出副作用。这些是明智的封装规则，将大大提高你的 Rx 代码的可维护性。
 
-To provide a simple example of a query that has a side effect, we will try to output the index and value of the elements that a subscription receives by updating a variable (closure).
+为了提供一个查询中存在副作用的简单示例，我们将尝试通过更新一个变量（闭包）来输出订阅接收到的元素的索引和值。
 
 ```csharp
 IObservable<char> letters = Observable
@@ -494,7 +494,7 @@ result.Subscribe(
     () => Console.WriteLine("completed"));
 ```
 
-Output:
+输出：
 
 ```
 Received A at index 0
@@ -503,7 +503,7 @@ Received C at index 2
 completed
 ```
 
-While this seems harmless enough, imagine if another person sees this code and understands it to be the pattern the team is using. They in turn adopt this style themselves. For the sake of the example, we will add a duplicate subscription to our previous example.
+虽然这似乎足够无害，但想象一下如果另一个人看到这段代码并理解这是团队使用的模式。他们反过来也采用这种风格。为了示例，我们将在之前的示例中添加一个重复订阅。
 
 ```csharp
 var letters = Observable.Range(0, 3)
@@ -526,7 +526,7 @@ result.Subscribe(
     () => Console.WriteLine("2nd completed"));
 ```
 
-Output
+输出
 
 ```
 Received A at index 0
@@ -539,13 +539,13 @@ Also received C at index 5
 2nd completed
 ```
 
-Now the second person's output is clearly nonsense. They will be expecting index values to be 0, 1 and 2 but get 3, 4 and 5 instead. I have seen far more sinister versions of side effects in code bases. The nasty ones often modify state that is a Boolean value e.g. `hasValues`, `isStreaming` etc.
+现在第二个人的输出显然是无意义的。他们期望索引值为 0，1 和 2，但得到了 3，4 和 5。我在代码库中见过更狡猾的副作用版本。可怕的那些经常修改状态，比如 Boolean 值，例如 `hasValues`、`isStreaming` 等。
 
-In addition to creating potentially unpredictable results in existing software, programs that exhibit side effects are far more difficult to test and maintain. Future refactoring, enhancements or other maintenance on programs that exhibits side effects are far more likely to be brittle. This is especially so in asynchronous or concurrent software.
+除了在现有软件中创造潜在不可预测的结果，展示副作用的程序在测试和维护方面也更加困难。未来的重构、增强或其他维护活动在展示副作用的程序上进行，可能更易碎。这在异步或并发软件中尤其如此。
 
-## Composing data in a pipeline
+## 在管道中组合数据
 
-The preferred way of capturing state is as part of the information flowing through the pipeline of Rx operators making up your subscription. Ideally, we want each part of the pipeline to be independent and deterministic. That is, each function that makes up the pipeline should have its inputs and output as its only state. To correct our example we could enrich the data in the pipeline so that there is no shared state. This would be a great example where we could use the `Select` overload that exposes the index.
+捕获状态的首选方式是作为构成您订阅的 Rx 操作符管道的信息的一部分。理想情况下，我们希望管道的每个部分都是独立和确定的。也就是说，构成管道的每个函数应该仅以其输入和输出作为其唯一的状态。要纠正我们的示例，我们可以丰富管道中的数据，以便没有共享状态。这将是我们可以使用暴露索引的 `Select` 重载的一个绝佳示例。
 
 ```csharp
 IObservable<int> source = Observable.Range(0, 3);
@@ -561,7 +561,7 @@ result.Subscribe(
     () => Console.WriteLine("2nd completed"));
 ```
 
-Output:
+输出：
 
 ```
 Received A at index 0
@@ -574,7 +574,7 @@ Also received C at index 2
 2nd completed
 ```
 
-Thinking outside of the box, we could also use other features like `Scan` to achieve similar results. Here is an example.
+跳出固定模式，我们还可以使用其他功能，如 `Scan`，来达到类似的结果。这是一个示例。
 
 ```csharp
 var result = source.Scan(
@@ -590,4 +590,4 @@ var result = source.Scan(
                 });
 ```
 
-The key here is to isolate the state, and reduce or remove any side effects like mutating state.
+这里的关键是隔离状态，并减少或消除任何副作用，如改变状态。
